@@ -97,7 +97,7 @@ def main(argv=None) -> int:
         # --force). Interactive commands are never run here.
         may_run = (not interactive) and (read_only or args.force)
         if may_run:
-            out = {"cmd": cmd, "interactive": False, "read_only": read_only,
+            out = {"cmd": cmd, "interactive": interactive, "read_only": read_only,
                    "ran": True, **run_captured(cmd)}
         elif interactive and shutil.which(first_binary(cmd)) is None:
             # Interactive tool that isn't installed → report as not-found so the
@@ -122,6 +122,8 @@ def main(argv=None) -> int:
         except json.JSONDecodeError:
             history = []
         last = history[-1] if history else {}
+        if not history:
+            return 0   # nothing to repair — never escalate to Claude on empty input
         for c in repair(history, last, runner=claude_run):
             print(f"{c['desc'] or c['cmd']}\t{c['cmd']}")
         return 0

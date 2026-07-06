@@ -64,3 +64,21 @@ def test_repair_reads_history_prints_candidates():
     desc, tab, cmd = line.partition("\t")
     assert cmd == "brew install ncdu"
     assert desc          # non-empty description
+
+
+def test_repair_empty_history_returns_no_candidates_without_claude():
+    p = _run(["--repair"], stdin="")          # empty stdin
+    assert p.stdout.strip() == ""             # no candidates
+    assert p.returncode == 0
+
+    p2 = _run(["--repair"], stdin="[]")        # empty array
+    assert p2.stdout.strip() == ""
+    assert p2.returncode == 0
+
+
+def test_run_interactive_not_executed_even_with_force():
+    p = _run(["--run", "less /etc/hosts", "--force"])   # less exists; interactive
+    obj = json.loads(p.stdout.strip())
+    assert obj["interactive"] is True
+    assert obj["ran"] is False               # NEVER executed, even with --force
+    assert obj["exit"] is None

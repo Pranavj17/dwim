@@ -34,3 +34,41 @@ def test_install_suggestion_uses_formula_map():
 
 def test_install_suggestion_none_without_brew():
     assert install_suggestion("ncdu", has_brew=False) is None
+
+
+from dwim.repair import repair
+
+
+def test_repair_deterministic_not_found_skips_runner():
+    called = {"n": 0}
+
+    def runner(prompt, model):
+        called["n"] += 1
+        return "{}"
+
+    last = {"cmd": "ncdu ~/x", "exit": 127, "stdout": "",
+            "stderr": "zsh: command not found: ncdu"}
+    out = repair([last], last, runner=runner)
+    assert out and out[0]["cmd"] == "brew install ncdu"
+    assert called["n"] == 0   # deterministic path — no Claude call
+
+
+def test_repair_falls_back_to_runner_for_other_failure():
+    captured = {}
+
+    def runner(prompt, model):
+        captured["prompt"] = prompt
+        return '{"answer":"try clean","commands":[{"cmd":"make clean","desc":"clean build"}]}'
+
+    last = {"cmd": "make", "exit": 2, "stdout": "", "stderr": "build error: foo"}
+    hist = [{"cmd": "make", "exit": 2, "stdout": "", "stderr": "build error: foo"}]
+    out = repair(hist, last, runner=runner)
+    assert out[0]["cmd"] == "make clean"
+    assert "make" in captured["prompt"]        # history threaded in
+    assert "build error: foo" in captured["prompt"]
+
+
+def test_repair_returns_empty_when_runner_gives_nothing():
+    last = {"cmd": "x", "exit": 1, "stdout": "", "stderr": "boom"}
+    out = repair([last], last, runner=lambda p, m: '{"commands":[]}')
+    assert out == []

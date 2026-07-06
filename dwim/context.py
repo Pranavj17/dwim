@@ -15,7 +15,8 @@ def _run(cmd) -> str:
 def gather() -> dict:
     cwd = os.getcwd()
     git = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
-    state = os.path.expanduser("~/.cache/dwim/last")
+    cache = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    state = os.path.join(cache, "dwim", "last")
     last_cmd, last_exit = "", ""
     if os.path.exists(state):
         with open(state) as f:

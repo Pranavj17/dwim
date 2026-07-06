@@ -1,0 +1,53 @@
+"""Static multi-model registry: ~/.config/dwim/config.toml maps roles→models."""
+
+import os
+import shutil
+import subprocess
+import tomllib
+
+DEFAULT_CONFIG = os.path.expanduser("~/.config/dwim/config.toml")
+
+_DEFAULTS = [
+    {"name": "qwen", "backend": "mlx",
+     "model": "mlx-community/Qwen2.5-Coder-1.5B-Instruct-4bit", "role": "correct"},
+    {"name": "sonnet", "backend": "claude-cli", "model": "sonnet", "role": "action"},
+]
+
+
+def load_models(path=None) -> list[dict]:
+    path = path or DEFAULT_CONFIG
+    if not os.path.exists(path):
+        return [dict(m) for m in _DEFAULTS]
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    out = []
+    for name, m in data.get("models", {}).items():
+        out.append({
+            "name": name,
+            "backend": m.get("backend", ""),
+            "model": m.get("model", ""),
+            "role": m.get("role", ""),
+        })
+    return out or [dict(m) for m in _DEFAULTS]
+
+
+def resolve_role(role: str, path=None) -> dict | None:
+    for m in load_models(path):
+        if m["role"] == role:
+            return m
+    return None
+
+
+def backend_status(m: dict) -> str:
+    backend = m.get("backend", "")
+    if backend == "claude-cli":
+        return "connected" if shutil.which("claude") else "offline"
+    if backend == "mlx":
+        py = os.path.expanduser("~/.venvs/dwim/bin/python")
+        if not os.path.exists(py):
+            return "offline"
+        r = subprocess.run([py, "-c", "import mlx_lm"], capture_output=True)
+        return "connected" if r.returncode == 0 else "offline"
+    if backend == "ollama":
+        return "connected" if shutil.which("ollama") else "offline"
+    return "unknown"

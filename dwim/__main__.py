@@ -34,10 +34,21 @@ def main(argv=None) -> int:
                         help="use the warm daemon only; exit 4 if it's down")
     parser.add_argument("--status", action="store_true",
                         help="print the active model + daemon state, then exit")
+    parser.add_argument("--models", action="store_true",
+                        help="list configured models + role + status")
     args = parser.parse_args(argv)
 
     if args.status:
         return _print_status()
+
+    if args.models:
+        from dwim.registry import load_models, backend_status
+        print(f"{'NAME':<10}{'BACKEND':<13}{'ROLE':<10}{'STATUS'}")
+        for m in load_models():
+            st = backend_status(m)
+            dot = "●" if st == "connected" else "○"
+            print(f"{m['name']:<10}{m['backend']:<13}{m['role']:<10}{dot} {st}")
+        return 0
 
     if not args.cmd or args.exit_code is None:
         parser.error("--cmd and --exit are required")

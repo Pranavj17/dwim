@@ -9,7 +9,7 @@ FORMULA_MAP = {
     "fd": "fd", "bat": "bat", "rg": "ripgrep", "http": "httpie",
 }
 
-_NOT_FOUND = re.compile(r"command not found:\s*(\S+)|(?:bash|sh|zsh|ksh):\s+(\S+):\s+command not found")
+_NOT_FOUND = re.compile(r"command not found: (\S+)|(?!.*command not found:)(\S+): command not found")
 
 
 def missing_binary(cmd: str, stderr: str) -> str | None:

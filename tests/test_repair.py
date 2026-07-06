@@ -9,6 +9,14 @@ def test_missing_binary_bash():
     assert missing_binary("htop", "bash: htop: command not found") == "htop"
 
 
+def test_missing_binary_bare_no_shell_prefix():
+    assert missing_binary("htop", "htop: command not found") == "htop"
+
+
+def test_missing_binary_nonstandard_shell():
+    assert missing_binary("ncdu", "fish: ncdu: command not found") == "ncdu"
+
+
 def test_missing_binary_none_when_not_a_not_found_error():
     assert missing_binary("ls /x", "ls: /x: No such file or directory") is None
 

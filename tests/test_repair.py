@@ -39,7 +39,9 @@ def test_install_suggestion_none_without_brew():
 from dwim.repair import repair
 
 
-def test_repair_deterministic_not_found_skips_runner():
+def test_repair_deterministic_not_found_skips_runner(monkeypatch):
+    import dwim.repair as r
+    monkeypatch.setattr(r.shutil, "which", lambda name: "/opt/homebrew/bin/brew")
     called = {"n": 0}
 
     def runner(prompt, model):

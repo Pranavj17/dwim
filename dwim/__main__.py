@@ -64,11 +64,15 @@ def main(argv=None) -> int:
         m = resolve_role("action")
         model = m["model"] if m else "haiku"
         effort = (m.get("effort") if m else "low") or ""
+        gray, reset, cyan = "\033[38;5;244m", "\033[0m", "\033[38;5;110m"
+        print(f"{gray}⋯ dwim is thinking…{reset}", file=sys.stderr, flush=True)
+        # The runner streams the agent's tool calls to stderr live (gray) as it
+        # works; then we print the answer and the command candidates.
         result = run_action(args.action,
                             runner=lambda p, md: claude_run(p, md, effort),
                             context=gather(), model=model)
         if result["answer"]:
-            print(result["answer"], file=sys.stderr)   # inline note
+            print(f"{cyan}✦{reset} {result['answer']}", file=sys.stderr)
         for c in result["commands"]:
             # "<plain-English desc>\t<command>" — fzf shows the desc, previews
             # the command, and loads the command on select.

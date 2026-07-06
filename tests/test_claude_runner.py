@@ -38,8 +38,9 @@ def test_run_returns_friendly_json_when_claude_missing(monkeypatch):
     monkeypatch.setattr(cr.shutil, "which", lambda name: None)
 
     def _boom(*a, **k):
-        raise AssertionError("subprocess.run must not be called when claude is missing")
+        raise AssertionError("no subprocess when claude is missing")
     monkeypatch.setattr(cr.subprocess, "run", _boom)
+    monkeypatch.setattr(cr.subprocess, "Popen", _boom)
 
     out = cr.run("anything", "sonnet")
     obj = json.loads(out)
@@ -47,23 +48,12 @@ def test_run_returns_friendly_json_when_claude_missing(monkeypatch):
     assert "claude" in obj["answer"].lower()
 
 
-def test_effort_flag_passed_only_when_set(monkeypatch):
-    import dwim.claude_runner as cr
-    captured = {}
-
-    class _Res:
-        stdout = '{"result": "{\\"answer\\":\\"\\",\\"commands\\":[]}"}'
-
-    def _fake_run(cmd, **k):
-        captured["cmd"] = list(cmd)
-        return _Res()
-
-    monkeypatch.setattr(cr.shutil, "which", lambda n: "/usr/bin/claude")
-    monkeypatch.setattr(cr.subprocess, "run", _fake_run)
-
-    cr.run("p", "haiku", "low")
-    assert "--effort" in captured["cmd"]
-    assert captured["cmd"][captured["cmd"].index("--effort") + 1] == "low"
-
-    cr.run("p", "haiku", "")
-    assert "--effort" not in captured["cmd"]
+def test_build_cmd_effort_and_flags():
+    from dwim.claude_runner import _build_cmd
+    cmd = _build_cmd("p", "haiku", "low")
+    assert "--strict-mcp-config" in cmd
+    assert cmd[cmd.index("--output-format") + 1] == "stream-json"
+    assert "--verbose" in cmd
+    assert cmd[cmd.index("--effort") + 1] == "low"
+    assert cmd[cmd.index("--setting-sources") + 1] == ""
+    assert "--effort" not in _build_cmd("p", "haiku", "")

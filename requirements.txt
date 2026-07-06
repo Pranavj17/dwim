@@ -1,0 +1,8 @@
+# dwim engine runtime — install into a pip venv on Apple Silicon for Metal GPU:
+#   python3 -m venv ~/.venvs/dwim && ~/.venvs/dwim/bin/pip install -r requirements.txt
+#
+# transformers is PINNED: mlx-lm 0.31.3 breaks against transformers >=5.6
+# (AutoTokenizer.register API change → 'str' object has no attribute '__module__').
+mlx>=0.31
+mlx-lm==0.31.3
+transformers==5.5.4

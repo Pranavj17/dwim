@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Where the python package lives: baked by Homebrew (DWIM_LIBEXEC) or, in dev,
+# the parent of this script's dir. Resolve symlinks so a PATH symlink (e.g.
+# ~/.local/bin/dwim-engine) still points back at the real repo.
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+HERE="${DWIM_LIBEXEC:-$(cd -P "$(dirname "$SOURCE")/.." && pwd)}"
+
+# The python that has Metal-backed mlx + mlx_lm. Default is the dedicated venv
+# (pip MLX has the Metal/GPU backend; Nix's mlx is CPU-only). Overridable.
+DWIM_PY="${DWIM_PYTHON:-$HOME/.venvs/dwim/bin/python}"
+if [[ ! -x "$DWIM_PY" ]]; then
+  echo "dwim: python with mlx_lm not found at $DWIM_PY" >&2
+  echo "      create it: python3 -m venv ~/.venvs/dwim && ~/.venvs/dwim/bin/pip install mlx-lm" >&2
+  exit 3
+fi
+
+exec env PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}" "$DWIM_PY" -m dwim "$@"

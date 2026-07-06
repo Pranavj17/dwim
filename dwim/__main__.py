@@ -38,6 +38,12 @@ def main(argv=None) -> int:
                         help="list configured models + role + status")
     parser.add_argument("--action", metavar="INTENT",
                         help="run the Claude agent palette for INTENT")
+    parser.add_argument("--run", metavar="CMD",
+                        help="classify CMD; run it captured (read-only, or mutating with --force); print JSON")
+    parser.add_argument("--force", action="store_true",
+                        help="with --run: permit executing a mutating command (user approved)")
+    parser.add_argument("--repair", action="store_true",
+                        help="read a JSON history array on stdin; print repair candidates")
     args = parser.parse_args(argv)
 
     if args.status:
@@ -78,6 +84,47 @@ def main(argv=None) -> int:
             # the command, and loads the command on select.
             print(f"{c['desc'] or c['cmd']}\t{c['cmd']}")
         return 0 if result["commands"] else 1
+
+    if args.run is not None:
+        import json
+        import shutil
+        from dwim.executor import (is_interactive, is_read_only, run_captured,
+                                   first_binary)
+        cmd = args.run
+        interactive = is_interactive(cmd)
+        read_only = is_read_only(cmd)
+        # Execute ONLY when safe (read-only) or explicitly approved (mutating +
+        # --force). Interactive commands are never run here.
+        may_run = (not interactive) and (read_only or args.force)
+        if may_run:
+            out = {"cmd": cmd, "interactive": False, "read_only": read_only,
+                   "ran": True, **run_captured(cmd)}
+        elif interactive and shutil.which(first_binary(cmd)) is None:
+            # Interactive tool that isn't installed → report as not-found so the
+            # loop repairs it (offer an install) instead of handing off a dud.
+            binv = first_binary(cmd)
+            out = {"cmd": cmd, "interactive": True, "read_only": read_only,
+                   "ran": False, "exit": 127, "stdout": "",
+                   "stderr": f"zsh: command not found: {binv}", "timed_out": False}
+        else:
+            out = {"cmd": cmd, "interactive": interactive, "read_only": read_only,
+                   "ran": False, "exit": None, "stdout": "", "stderr": "",
+                   "timed_out": False}
+        print(json.dumps(out))
+        return 0
+
+    if args.repair:
+        import json
+        from dwim.repair import repair
+        from dwim.claude_runner import run as claude_run
+        try:
+            history = json.loads(sys.stdin.read() or "[]")
+        except json.JSONDecodeError:
+            history = []
+        last = history[-1] if history else {}
+        for c in repair(history, last, runner=claude_run):
+            print(f"{c['desc'] or c['cmd']}\t{c['cmd']}")
+        return 0
 
     if not args.cmd or args.exit_code is None:
         parser.error("--cmd and --exit are required")

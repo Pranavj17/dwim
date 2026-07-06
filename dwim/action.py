@@ -1,7 +1,6 @@
 """Build the Claude agent prompt, run it (injected), parse {answer, commands}."""
 
 import json
-import re
 
 SYSTEM_PROMPT = (
     "You are a terminal action assistant. The user gives an intent. Investigate "
@@ -24,17 +23,45 @@ def build_prompt(intent: str, context: dict) -> str:
     )
 
 
+def _json_objects(text):
+    """Yield top-level balanced {...} substrings in order (string-aware)."""
+    depth = 0
+    start = None
+    in_str = False
+    esc = False
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    yield text[start:i + 1]
+                    start = None
+
+
 def parse_response(text: str) -> dict:
     text = (text or "").strip()
-    # Find the last {...} JSON object in the output.
-    matches = re.findall(r"\{.*\}", text, re.DOTALL)
-    for chunk in reversed(matches):
+    # Find the last top-level {...} JSON object that parses to a dict with a list `commands`.
+    for chunk in reversed(list(_json_objects(text))):
         try:
             obj = json.loads(chunk)
         except json.JSONDecodeError:
             continue
-        if isinstance(obj, dict) and "commands" in obj:
-            cmds = [str(c) for c in obj.get("commands", []) if str(c).strip()]
+        if isinstance(obj, dict) and isinstance(obj.get("commands"), list):
+            cmds = [str(c) for c in obj["commands"] if str(c).strip()]
             return {"answer": str(obj.get("answer", "")), "commands": cmds}
     return {"answer": text, "commands": []}
 

@@ -36,3 +36,31 @@ def test_run_action_uses_injected_runner():
                      context={"cwd": "/tmp", "git": ""})
     assert out["commands"] == ["du -sh *"]
     assert "what is big" in captured["prompt"]
+
+
+def test_parse_json_after_prose_with_earlier_brace():
+    raw = ('While investigating I saw a config like {"foo": "bar"} in the repo. '
+           'Here is my answer: {"answer": "use rg", "commands": ["rg TODO"]}')
+    out = parse_response(raw)
+    assert out["answer"] == "use rg"
+    assert out["commands"] == ["rg TODO"]
+
+
+def test_parse_non_list_commands_falls_back():
+    out = parse_response('{"answer": "do this", "commands": "ls -la"}')
+    assert out["commands"] == []          # not char-split
+    assert "do this" in out["answer"]
+
+
+def test_parse_brace_inside_json_string_value():
+    out = parse_response('{"answer": "run {rg}", "commands": ["rg x"]}')
+    assert out["commands"] == ["rg x"]    # brace inside a string value must not confuse the scanner
+
+
+def test_run_action_passes_model_through():
+    seen = {}
+    def fake_runner(prompt, model):
+        seen["model"] = model
+        return '{"answer":"ok","commands":["pwd"]}'
+    run_action("hi", runner=fake_runner, context={"cwd": "/tmp"}, model="sonnet")
+    assert seen["model"] == "sonnet"

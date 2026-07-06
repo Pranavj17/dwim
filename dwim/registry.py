@@ -51,9 +51,12 @@ def backend_status(m: dict) -> str:
         py = os.path.expanduser("~/.venvs/dwim/bin/python")
         if not os.path.exists(py):
             return "offline"
+        # find_spec locates the package without importing it — mlx_lm's real
+        # import is ~5s and raced the old timeout. Keep the probe light + static.
+        probe = ("import importlib.util, sys; "
+                 "sys.exit(0 if importlib.util.find_spec('mlx_lm') else 1)")
         try:
-            r = subprocess.run([py, "-c", "import mlx_lm"],
-                               capture_output=True, timeout=5)
+            r = subprocess.run([py, "-c", probe], capture_output=True, timeout=10)
         except subprocess.TimeoutExpired:
             return "offline"
         return "connected" if r.returncode == 0 else "offline"

@@ -34,3 +34,25 @@ def test_malformed_toml_falls_back_to_defaults(tmp_path, capsys):
     roles = {m["role"] for m in models}
     assert "correct" in roles and "action" in roles
     assert "malformed" in capsys.readouterr().err
+
+
+def test_backend_status_mlx(monkeypatch):
+    import dwim.registry as r
+    monkeypatch.setattr(r.os.path, "exists", lambda p: True)
+
+    class _Res:
+        def __init__(self, rc): self.returncode = rc
+
+    monkeypatch.setattr(r.subprocess, "run", lambda *a, **k: _Res(0))
+    assert r.backend_status({"backend": "mlx"}) == "connected"
+
+    monkeypatch.setattr(r.subprocess, "run", lambda *a, **k: _Res(1))
+    assert r.backend_status({"backend": "mlx"}) == "offline"
+
+    def _timeout(*a, **k):
+        raise r.subprocess.TimeoutExpired(cmd="python", timeout=10)
+    monkeypatch.setattr(r.subprocess, "run", _timeout)
+    assert r.backend_status({"backend": "mlx"}) == "offline"
+
+    monkeypatch.setattr(r.os.path, "exists", lambda p: False)
+    assert r.backend_status({"backend": "mlx"}) == "offline"

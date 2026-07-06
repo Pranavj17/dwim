@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Resolve real script dir through symlinks (see dwim-engine).
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+HERE="${DWIM_LIBEXEC:-$(cd -P "$(dirname "$SOURCE")/.." && pwd)}"
+
+DWIM_PY="${DWIM_PYTHON:-$HOME/.venvs/dwim/bin/python}"
+if [[ ! -x "$DWIM_PY" ]]; then
+  echo "dwim: python with mlx_lm not found at $DWIM_PY" >&2
+  exit 3
+fi
+
+export HF_HUB_DISABLE_PROGRESS_BARS=1
+export HF_HUB_DISABLE_TELEMETRY=1
+export TRANSFORMERS_NO_ADVISORY_WARNINGS=1
+export TOKENIZERS_PARALLELISM=false
+
+exec env PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}" "$DWIM_PY" -m dwim.daemon

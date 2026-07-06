@@ -19,14 +19,10 @@ READ_ONLY_VERBS = frozenset({
 })
 _READ_ONLY_GIT_SUB = frozenset({"status", "log", "diff"})  # mirror _ALLOWED
 
-# Benign redirects to strip before the unsafe-redirect check: >/dev/null,
-# 2>/dev/null, &>/dev/null, and fd-dups like 2>&1.
-_BENIGN_REDIR = re.compile(r"(?:&>|\d*>>?)\s*/dev/null|\d*>&\d*")
-# Write redirects (>, >>) and command substitution ($( ), backticks, <( )) can
-# write files or execute — never auto-run these.
-_UNSAFE = re.compile(r">|`|\$\(|<\(")
-# Shell command separators — each side must independently be read-only.
-_SEPARATORS = re.compile(r"&&|\|\||\||;")
+# Benign redirects to strip before scanning: >/dev/null, 2>/dev/null,
+# &>/dev/null (anchored so /dev/nullx etc. are NOT matched), and fd-dups like
+# 2>&1 (digits required on both sides so >&word is NOT treated as benign).
+_BENIGN_REDIR = re.compile(r"(?:&>|\d*>>?)\s*/dev/null(?=\s|$)|\d+>&\d+")
 
 
 def first_binary(cmd: str) -> str:
@@ -55,10 +51,55 @@ def _segment_read_only(seg: str) -> bool:
 def is_read_only(cmd: str) -> bool:
     if not cmd.strip():
         return False
-    probe = _BENIGN_REDIR.sub("", cmd)      # ignore harmless >/dev/null, 2>&1
-    if _UNSAFE.search(probe):
-        return False                        # writes / command substitution → confirm
-    return all(_segment_read_only(s) for s in _SEPARATORS.split(cmd))
+    probe = _BENIGN_REDIR.sub(" ", cmd)
+    # Walk the string; only operators OUTSIDE quotes are real shell operators.
+    # '|' splits a pipeline (each segment re-checked); any other operator
+    # (redirect, background, chain, newline, command substitution) → not
+    # auto-runnable, force the confirm path.
+    segments = [""]
+    in_single = in_double = False
+    i, n = 0, len(probe)
+    while i < n:
+        c = probe[i]
+        two = probe[i:i + 2]
+        if in_single:
+            if c == "'":
+                in_single = False
+            segments[-1] += c
+            i += 1
+            continue
+        if in_double:
+            if c == '"':
+                in_double = False
+            segments[-1] += c
+            i += 1
+            continue
+        if c == "'":
+            in_single = True
+            segments[-1] += c
+            i += 1
+            continue
+        if c == '"':
+            in_double = True
+            segments[-1] += c
+            i += 1
+            continue
+        # Unquoted operators:
+        if two == "$(" or c == "`":
+            return False                      # command substitution
+        if c in "<>":
+            return False                      # redirect (benign /dev/null already stripped)
+        if c in ";&\n":
+            return False                      # chain / background / newline separator
+        if c == "|":
+            if two == "||":
+                return False                  # logical OR chains a fallback command
+            segments.append("")               # pipe → new pipeline segment
+            i += 1
+            continue
+        segments[-1] += c
+        i += 1
+    return all(_segment_read_only(s) for s in segments)
 
 
 def run_captured(cmd: str, *, timeout: int = 30, cap: int = 4000) -> dict:

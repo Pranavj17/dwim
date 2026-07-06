@@ -21,4 +21,11 @@ if [[ ! -x "$DWIM_PY" ]]; then
   exit 3
 fi
 
+# Silence HuggingFace/transformers progress bars + advisory noise so only the
+# corrected command reaches the terminal.
+export HF_HUB_DISABLE_PROGRESS_BARS=1
+export HF_HUB_DISABLE_TELEMETRY=1
+export TRANSFORMERS_NO_ADVISORY_WARNINGS=1
+export TOKENIZERS_PARALLELISM=false
+
 exec env PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}" "$DWIM_PY" -m dwim "$@"

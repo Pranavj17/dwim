@@ -25,3 +25,12 @@ def test_backend_status_claude(monkeypatch):
     assert backend_status({"backend": "claude-cli"}) == "connected"
     monkeypatch.setattr(r.shutil, "which", lambda c: None)
     assert backend_status({"backend": "claude-cli"}) == "offline"
+
+
+def test_malformed_toml_falls_back_to_defaults(tmp_path, capsys):
+    p = tmp_path / "config.toml"
+    p.write_text('[models.qwen\nbackend="mlx"\n')  # missing closing bracket
+    models = load_models(str(p))
+    roles = {m["role"] for m in models}
+    assert "correct" in roles and "action" in roles
+    assert "malformed" in capsys.readouterr().err

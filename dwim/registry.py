@@ -19,7 +19,12 @@ def load_models(path=None) -> list[dict]:
     if not os.path.exists(path):
         return [dict(m) for m in _DEFAULTS]
     with open(path, "rb") as f:
-        data = tomllib.load(f)
+        try:
+            data = tomllib.load(f)
+        except tomllib.TOMLDecodeError as e:
+            import sys
+            print(f"dwim: ignoring malformed {path}: {e}", file=sys.stderr)
+            return [dict(m) for m in _DEFAULTS]
     out = []
     for name, m in data.get("models", {}).items():
         out.append({
@@ -46,7 +51,11 @@ def backend_status(m: dict) -> str:
         py = os.path.expanduser("~/.venvs/dwim/bin/python")
         if not os.path.exists(py):
             return "offline"
-        r = subprocess.run([py, "-c", "import mlx_lm"], capture_output=True)
+        try:
+            r = subprocess.run([py, "-c", "import mlx_lm"],
+                               capture_output=True, timeout=5)
+        except subprocess.TimeoutExpired:
+            return "offline"
         return "connected" if r.returncode == 0 else "offline"
     if backend == "ollama":
         return "connected" if shutil.which("ollama") else "offline"

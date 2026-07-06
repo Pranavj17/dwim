@@ -52,16 +52,19 @@ def is_read_only(cmd: str) -> bool:
     if not cmd.strip():
         return False
     probe = _BENIGN_REDIR.sub(" ", cmd)
-    # Walk the string; only operators OUTSIDE quotes are real shell operators.
-    # '|' splits a pipeline (each segment re-checked); any other operator
-    # (redirect, background, chain, newline, command substitution) → not
-    # auto-runnable, force the confirm path.
     segments = [""]
     in_single = in_double = False
     i, n = 0, len(probe)
     while i < n:
         c = probe[i]
         two = probe[i:i + 2]
+        # Backslash escapes the next char OUTSIDE single quotes (single quotes
+        # take everything literally). Keep both chars literal so \' / \" / \$
+        # never toggle quote state or start substitution.
+        if c == "\\" and not in_single:
+            segments[-1] += probe[i:i + 2]
+            i += 2
+            continue
         if in_single:
             if c == "'":
                 in_single = False
@@ -69,11 +72,16 @@ def is_read_only(cmd: str) -> bool:
             i += 1
             continue
         if in_double:
+            # Double quotes suppress word-splitting/globbing but NOT command
+            # substitution — $( ) and backticks still execute inside them.
+            if two == "$(" or c == "`":
+                return False
             if c == '"':
                 in_double = False
             segments[-1] += c
             i += 1
             continue
+        # Unquoted context:
         if c == "'":
             in_single = True
             segments[-1] += c
@@ -84,21 +92,24 @@ def is_read_only(cmd: str) -> bool:
             segments[-1] += c
             i += 1
             continue
-        # Unquoted operators:
         if two == "$(" or c == "`":
             return False                      # command substitution
+        if c in "()":
+            return False                      # subshell grouping
         if c in "<>":
             return False                      # redirect (benign /dev/null already stripped)
         if c in ";&\n":
-            return False                      # chain / background / newline separator
+            return False                      # chain / background / newline
         if c == "|":
             if two == "||":
-                return False                  # logical OR chains a fallback command
-            segments.append("")               # pipe → new pipeline segment
+                return False
+            segments.append("")
             i += 1
             continue
         segments[-1] += c
         i += 1
+    if in_single or in_double:
+        return False                          # unterminated quote → fail safe
     return all(_segment_read_only(s) for s in segments)
 
 

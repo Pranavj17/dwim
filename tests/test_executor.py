@@ -38,6 +38,31 @@ def test_read_only_rejects_redirects_and_substitution():
         assert not is_read_only(c), c
 
 
+def test_read_only_rejects_double_quoted_substitution():
+    for c in ['echo "$(touch /tmp/x)"', 'cat "$(rm x)"',
+              'echo "`id`"', 'echo "${x:=$(rm x)}"']:
+        assert not is_read_only(c), c
+
+
+def test_read_only_rejects_backslash_quote_tricks():
+    assert not is_read_only(r"echo \' ; touch /tmp/x")
+    assert not is_read_only(r'echo \" ; rm x')
+
+
+def test_read_only_rejects_subshell_and_unterminated():
+    assert not is_read_only("(rm x)")
+    assert not is_read_only("echo x; (rm y)")
+    assert not is_read_only("ls 'unterminated")
+
+
+def test_read_only_still_allows_variables_and_quoted_specials():
+    assert is_read_only("du -sh $HOME")
+    assert is_read_only('echo "hello world"')
+    assert is_read_only("grep 'a > b' file")
+    assert is_read_only("git log --pretty=format:'%h -> %s'")
+    assert is_read_only(r'echo "\$(not real)"')   # escaped $ is literal, safe
+
+
 def test_read_only_git_subcommands():
     assert is_read_only("git status")
     assert is_read_only("git log --oneline")

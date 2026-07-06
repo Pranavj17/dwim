@@ -1,6 +1,7 @@
 """Invoke `claude -p` as a read-only investigating agent."""
 
 import json
+import shutil
 import subprocess
 
 # Read-only tools + read-only shell verbs. Mutating bash is NOT allowed, so the
@@ -14,6 +15,8 @@ _ALLOWED = [
 
 
 def run(prompt: str, model: str) -> str:
+    if not shutil.which("claude"):
+        return '{"answer": "dwim: claude CLI not found — @ palette needs it.", "commands": []}'
     cmd = [
         "claude", "-p", prompt,
         "--model", model,

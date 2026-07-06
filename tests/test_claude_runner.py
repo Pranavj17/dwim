@@ -30,3 +30,13 @@ _KNOWN_SAFE = {
 def test_allowlist_is_subset_of_known_safe():
     extra = set(_ALLOWED) - _KNOWN_SAFE
     assert not extra, f"unreviewed tools in allowlist (add to _KNOWN_SAFE only after review): {extra}"
+
+
+def test_run_returns_friendly_json_when_claude_missing(monkeypatch):
+    import dwim.claude_runner as cr
+    monkeypatch.setattr(cr.shutil, "which", lambda name: None)
+    out = cr.run("anything", "sonnet")
+    import json
+    obj = json.loads(out)
+    assert obj["commands"] == []
+    assert "claude" in obj["answer"].lower()

@@ -71,7 +71,8 @@ def main(argv=None) -> int:
         model = m["model"] if m else "haiku"
         effort = (m.get("effort") if m else "low") or ""
         gray, reset, cyan = "\033[38;5;244m", "\033[0m", "\033[38;5;110m"
-        print(f"{gray}⋯ dwim is thinking…{reset}", file=sys.stderr, flush=True)
+        icon = os.environ.get("DWIM_ICON", "✨")
+        print(f"{gray}{icon} dwim is thinking…{reset}", file=sys.stderr, flush=True)
         # The runner streams the agent's tool calls to stderr live (gray) as it
         # works; then we print the answer and the command candidates.
         result = run_action(args.action,

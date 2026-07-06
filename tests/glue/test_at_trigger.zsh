@@ -10,11 +10,13 @@ chmod +x "$bindir/dwim-action"
 
 source "$HOME/dotfiles/files/zsh/dwim.zsh"
 
-# Stub fzf to pick the first line; stub the buffer-load seam.
+# Stub fzf to pick the first line; stub the execute-loop seam (the picked
+# command now drives run→observe→repair instead of loading straight onto
+# the prompt — this test asserts the routing, not the loop's internals).
 fzf() { head -1 }
-typeset -g _DWIM_LOADED=""
-_dwim_load() { _DWIM_LOADED="$1" }
+typeset -g _DWIM_LOOP_CALLED=""
+_dwim_execute_loop() { _DWIM_LOOP_CALLED="$1" }
 
 _dwim_run_action "find big files"
-[[ "$_DWIM_LOADED" == "du -sh *" ]] || { print "FAIL: got '$_DWIM_LOADED'"; exit 1 }
+[[ "$_DWIM_LOOP_CALLED" == "du -sh *" ]] || { print "FAIL: got '$_DWIM_LOOP_CALLED'"; exit 1 }
 print "PASS"

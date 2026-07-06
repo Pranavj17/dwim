@@ -9,7 +9,7 @@ _ALLOWED = [
     "Read", "Glob", "Grep", "WebSearch",
     "Bash(ls:*)", "Bash(cat:*)", "Bash(git status)", "Bash(git log:*)",
     "Bash(git diff:*)", "Bash(du:*)", "Bash(df:*)", "Bash(grep:*)",
-    "Bash(rg:*)", "Bash(find:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(pwd)",
+    "Bash(rg:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(pwd)",
 ]
 
 

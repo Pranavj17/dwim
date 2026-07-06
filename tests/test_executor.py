@@ -79,6 +79,25 @@ def test_read_only_allows_benign():
         assert is_read_only(c), c
 
 
+def test_read_only_rejects_output_flags():
+    assert not is_read_only("sort -o /tmp/x /etc/hosts")
+    assert not is_read_only("git diff --output=/tmp/x HEAD~1")
+    assert not is_read_only("git log --output /tmp/x")
+    assert not is_read_only("git diff --output /tmp/x")
+
+
+def test_read_only_rejects_uniq_output_arg():
+    assert not is_read_only("uniq /etc/hosts /tmp/x")   # 2nd positional = OUTPUT (writes)
+    assert is_read_only("uniq /etc/hosts")               # 1 positional = reads
+    assert is_read_only("cat f | uniq")                  # stdin
+
+
+def test_read_only_still_allows_sort_and_pipelines():
+    assert is_read_only("du -ah ~ 2>/dev/null | sort -rh | head -5")
+    assert is_read_only("sort /etc/hosts")               # sorts to stdout
+    assert is_read_only("sort -rh")                       # stdin → stdout
+
+
 def test_first_binary():
     from dwim.executor import first_binary
     assert first_binary("ncdu ~/Documents") == "ncdu"

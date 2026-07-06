@@ -38,13 +38,30 @@ def is_interactive(cmd: str) -> bool:
     return first_binary(cmd) in INTERACTIVE
 
 
+# Flags that make an otherwise-read-only tool WRITE a file (sort -o, git --output).
+_OUTPUT_FLAGS = ("-o", "--output")
+
+
 def _segment_read_only(seg: str) -> bool:
-    verb = first_binary(seg)
-    if not verb:
-        return False
-    if verb == "git":
+    try:
+        parts = shlex.split(seg)
+    except ValueError:
         parts = seg.split()
+    if not parts:
+        return False
+    verb, args = parts[0], parts[1:]
+    # Any explicit output flag turns a reader into a writer → not auto-runnable.
+    for a in args:
+        if a in _OUTPUT_FLAGS or a.startswith("--output") or a.startswith("-o="):
+            return False
+    if verb == "git":
         return len(parts) > 1 and parts[1] in _READ_ONLY_GIT_SUB
+    if verb == "uniq":
+        # uniq [OPTS] [INPUT [OUTPUT]] — a 2nd positional (non-flag) arg is an
+        # OUTPUT file it writes. Allow 0 (stdin) or 1 (input) positionals only.
+        positionals = [a for a in args if not a.startswith("-")]
+        if len(positionals) >= 2:
+            return False
     return verb in READ_ONLY_VERBS
 
 

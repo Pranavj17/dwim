@@ -56,3 +56,13 @@ def test_backend_status_mlx(monkeypatch):
 
     monkeypatch.setattr(r.os.path, "exists", lambda p: False)
     assert r.backend_status({"backend": "mlx"}) == "offline"
+
+
+def test_config_effort_parsed(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text('[models.haiku]\nbackend="claude-cli"\nmodel="haiku"\nrole="action"\neffort="medium"\n')
+    assert resolve_role("action", str(p))["effort"] == "medium"
+
+
+def test_default_action_effort_is_low():
+    assert resolve_role("action", "/nonexistent/config.toml")["effort"] == "low"

@@ -14,7 +14,7 @@ _ALLOWED = [
 ]
 
 
-def run(prompt: str, model: str) -> str:
+def run(prompt: str, model: str, effort: str = "") -> str:
     if not shutil.which("claude"):
         return '{"answer": "dwim: claude CLI not found — @ palette needs it.", "commands": []}'
     cmd = [
@@ -22,7 +22,15 @@ def run(prompt: str, model: str) -> str:
         "--model", model,
         "--output-format", "json",
         "--allowedTools", *_ALLOWED,
+        # Speed: skip the user's MCP servers and project settings/hooks — they
+        # add ~5s of startup on every call. Built-in tools (Read/Bash/…) are
+        # unaffected; the agent still runs in the user's cwd so it can inspect
+        # the current directory.
+        "--strict-mcp-config",
+        "--setting-sources", "",
     ]
+    if effort:
+        cmd += ["--effort", effort]   # low effort = faster, less deliberation
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     out = proc.stdout.strip()
     try:

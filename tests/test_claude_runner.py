@@ -45,3 +45,25 @@ def test_run_returns_friendly_json_when_claude_missing(monkeypatch):
     obj = json.loads(out)
     assert obj["commands"] == []
     assert "claude" in obj["answer"].lower()
+
+
+def test_effort_flag_passed_only_when_set(monkeypatch):
+    import dwim.claude_runner as cr
+    captured = {}
+
+    class _Res:
+        stdout = '{"result": "{\\"answer\\":\\"\\",\\"commands\\":[]}"}'
+
+    def _fake_run(cmd, **k):
+        captured["cmd"] = list(cmd)
+        return _Res()
+
+    monkeypatch.setattr(cr.shutil, "which", lambda n: "/usr/bin/claude")
+    monkeypatch.setattr(cr.subprocess, "run", _fake_run)
+
+    cr.run("p", "haiku", "low")
+    assert "--effort" in captured["cmd"]
+    assert captured["cmd"][captured["cmd"].index("--effort") + 1] == "low"
+
+    cr.run("p", "haiku", "")
+    assert "--effort" not in captured["cmd"]

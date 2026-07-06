@@ -9,8 +9,10 @@ DEFAULT_CONFIG = os.path.expanduser("~/.config/dwim/config.toml")
 
 _DEFAULTS = [
     {"name": "qwen", "backend": "mlx",
-     "model": "mlx-community/Qwen2.5-Coder-1.5B-Instruct-4bit", "role": "correct"},
-    {"name": "sonnet", "backend": "claude-cli", "model": "sonnet", "role": "action"},
+     "model": "mlx-community/Qwen2.5-Coder-1.5B-Instruct-4bit",
+     "role": "correct", "effort": ""},
+    {"name": "haiku", "backend": "claude-cli", "model": "haiku",
+     "role": "action", "effort": "low"},
 ]
 
 
@@ -32,6 +34,7 @@ def load_models(path=None) -> list[dict]:
             "backend": m.get("backend", ""),
             "model": m.get("model", ""),
             "role": m.get("role", ""),
+            "effort": m.get("effort", ""),   # claude effort level (low/medium/high)
         })
     return out or [dict(m) for m in _DEFAULTS]
 

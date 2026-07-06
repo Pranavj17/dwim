@@ -45,11 +45,15 @@ def main(argv=None) -> int:
 
     if args.models:
         from dwim.registry import load_models, backend_status
-        print(f"{'NAME':<10}{'BACKEND':<13}{'ROLE':<10}{'STATUS'}")
+        print(f"{'NAME':<10}{'BACKEND':<13}{'ROLE':<10}{'EFFORT':<8}{'STATUS'}")
         for m in load_models():
             st = backend_status(m)
             dot = "●" if st == "connected" else "○"
-            print(f"{m['name']:<10}{m['backend']:<13}{m['role']:<10}{dot} {st}")
+            eff = m.get("effort") or "—"
+            print(f"{m['name']:<10}{m['backend']:<13}{m['role']:<10}{eff:<8}{dot} {st}")
+        print("\ncustomize in ~/.config/dwim/config.toml — e.g.\n"
+              "  [models.haiku]\n  backend = \"claude-cli\"\n  model = \"haiku\"\n"
+              "  role = \"action\"\n  effort = \"low\"   # low|medium|high")
         return 0
 
     if args.action is not None:
@@ -58,13 +62,17 @@ def main(argv=None) -> int:
         from dwim.claude_runner import run as claude_run
         from dwim.registry import resolve_role
         m = resolve_role("action")
-        model = m["model"] if m else "sonnet"
-        result = run_action(args.action, runner=claude_run,
+        model = m["model"] if m else "haiku"
+        effort = (m.get("effort") if m else "low") or ""
+        result = run_action(args.action,
+                            runner=lambda p, md: claude_run(p, md, effort),
                             context=gather(), model=model)
         if result["answer"]:
             print(result["answer"], file=sys.stderr)   # inline note
         for c in result["commands"]:
-            print(c)                                    # stdout → fzf
+            # "<plain-English desc>\t<command>" — fzf shows the desc, previews
+            # the command, and loads the command on select.
+            print(f"{c['desc'] or c['cmd']}\t{c['cmd']}")
         return 0 if result["commands"] else 1
 
     if not args.cmd or args.exit_code is None:

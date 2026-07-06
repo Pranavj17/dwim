@@ -10,13 +10,13 @@ def test_build_prompt_includes_intent_and_context():
 def test_parse_valid_json():
     out = parse_response('{"answer": "ok", "commands": ["ls -la", "du -sh *"]}')
     assert out["answer"] == "ok"
-    assert out["commands"] == ["ls -la", "du -sh *"]
+    assert [c["cmd"] for c in out["commands"]] == ["ls -la", "du -sh *"]
 
 
 def test_parse_json_embedded_in_prose():
     raw = 'Here you go:\n{"answer":"hi","commands":["pwd"]}\nHope that helps.'
     out = parse_response(raw)
-    assert out["commands"] == ["pwd"]
+    assert [c["cmd"] for c in out["commands"]] == ["pwd"]
 
 
 def test_parse_malformed_falls_back_to_answer():
@@ -34,7 +34,7 @@ def test_run_action_uses_injected_runner():
 
     out = run_action("what is big", runner=fake_runner,
                      context={"cwd": "/tmp", "git": ""})
-    assert out["commands"] == ["du -sh *"]
+    assert [c["cmd"] for c in out["commands"]] == ["du -sh *"]
     assert "what is big" in captured["prompt"]
 
 
@@ -43,7 +43,7 @@ def test_parse_json_after_prose_with_earlier_brace():
            'Here is my answer: {"answer": "use rg", "commands": ["rg TODO"]}')
     out = parse_response(raw)
     assert out["answer"] == "use rg"
-    assert out["commands"] == ["rg TODO"]
+    assert [c["cmd"] for c in out["commands"]] == ["rg TODO"]
 
 
 def test_parse_non_list_commands_falls_back():
@@ -54,7 +54,7 @@ def test_parse_non_list_commands_falls_back():
 
 def test_parse_brace_inside_json_string_value():
     out = parse_response('{"answer": "run {rg}", "commands": ["rg x"]}')
-    assert out["commands"] == ["rg x"]    # brace inside a string value must not confuse the scanner
+    assert [c["cmd"] for c in out["commands"]] == ["rg x"]  # brace inside a string value must not confuse the scanner
 
 
 def test_run_action_passes_model_through():
@@ -64,3 +64,13 @@ def test_run_action_passes_model_through():
         return '{"answer":"ok","commands":["pwd"]}'
     run_action("hi", runner=fake_runner, context={"cwd": "/tmp"}, model="sonnet")
     assert seen["model"] == "sonnet"
+
+
+def test_parse_command_objects_carry_desc():
+    out = parse_response('{"answer":"", "commands":[{"cmd":"ls -la","desc":"list files"}]}')
+    assert out["commands"] == [{"cmd": "ls -la", "desc": "list files"}]
+
+
+def test_parse_bare_string_commands_get_empty_desc():
+    out = parse_response('{"answer":"", "commands":["pwd"]}')
+    assert out["commands"] == [{"cmd": "pwd", "desc": ""}]

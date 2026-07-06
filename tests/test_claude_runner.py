@@ -33,10 +33,15 @@ def test_allowlist_is_subset_of_known_safe():
 
 
 def test_run_returns_friendly_json_when_claude_missing(monkeypatch):
+    import json
     import dwim.claude_runner as cr
     monkeypatch.setattr(cr.shutil, "which", lambda name: None)
+
+    def _boom(*a, **k):
+        raise AssertionError("subprocess.run must not be called when claude is missing")
+    monkeypatch.setattr(cr.subprocess, "run", _boom)
+
     out = cr.run("anything", "sonnet")
-    import json
     obj = json.loads(out)
     assert obj["commands"] == []
     assert "claude" in obj["answer"].lower()

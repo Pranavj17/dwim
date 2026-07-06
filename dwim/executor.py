@@ -1,6 +1,7 @@
 """Classify a shell command (interactive? read-only?) and run captured commands."""
 
 import shlex
+import subprocess
 
 # Full-screen/interactive tools — never captured or auto-run; handed to the shell.
 INTERACTIVE = frozenset({
@@ -41,3 +42,21 @@ def is_read_only(cmd: str) -> bool:
     if verb == "git":
         return len(parts) > 1 and parts[1] in _READ_ONLY_GIT_SUB
     return verb in READ_ONLY_VERBS
+
+
+def run_captured(cmd: str, *, timeout: int = 30, cap: int = 4000) -> dict:
+    """Run a non-interactive command, capturing output. Never raises."""
+    try:
+        p = subprocess.run(cmd, shell=True, capture_output=True, text=True,
+                           timeout=timeout)
+        return {"exit": p.returncode, "stdout": p.stdout[:cap],
+                "stderr": p.stderr[:cap], "timed_out": False}
+    except subprocess.TimeoutExpired as e:
+        out = (e.stdout or "")
+        err = (e.stderr or "")
+        if isinstance(out, bytes):
+            out = out.decode("utf-8", "replace")
+        if isinstance(err, bytes):
+            err = err.decode("utf-8", "replace")
+        return {"exit": 124, "stdout": out[:cap], "stderr": err[:cap],
+                "timed_out": True}

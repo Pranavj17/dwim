@@ -29,3 +29,34 @@ def test_first_binary():
     assert first_binary("ncdu ~/Documents") == "ncdu"
     assert first_binary("du -sh ~/*") == "du"
     assert first_binary("") == ""
+
+
+from dwim.executor import run_captured
+
+
+def test_run_captured_success():
+    r = run_captured("echo hello")
+    assert r["exit"] == 0
+    assert r["stdout"].strip() == "hello"
+    assert r["timed_out"] is False
+
+
+def test_run_captured_failure_has_stderr():
+    r = run_captured("ls /no/such/path/xyz")
+    assert r["exit"] != 0
+    assert r["stderr"] != ""
+
+
+def test_run_captured_command_not_found():
+    r = run_captured("definitely-not-a-real-cmd-xyz")
+    assert r["exit"] == 127
+
+
+def test_run_captured_truncates_output():
+    r = run_captured("printf 'x%.0s' {1..10000}", cap=100)
+    assert len(r["stdout"]) <= 100
+
+
+def test_run_captured_timeout():
+    r = run_captured("sleep 5", timeout=1)
+    assert r["timed_out"] is True

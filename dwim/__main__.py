@@ -122,9 +122,9 @@ def main(argv=None) -> int:
             history = json.loads(sys.stdin.read() or "[]")
         except json.JSONDecodeError:
             history = []
-        last = history[-1] if history else {}
-        if not history:
-            return 0   # nothing to repair — never escalate to Claude on empty input
+        if not isinstance(history, list) or not history:
+            return 0   # nothing to repair — never escalate to Claude on empty/garbage input
+        last = history[-1]
         for c in repair(history, last, runner=claude_run):
             print(f"{c['desc'] or c['cmd']}\t{c['cmd']}")
         return 0

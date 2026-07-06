@@ -76,6 +76,18 @@ def test_repair_empty_history_returns_no_candidates_without_claude():
     assert p2.returncode == 0
 
 
+def test_repair_nonlist_json_returns_zero_without_traceback():
+    p = _run(["--repair"], stdin='{"cmd":"x"}')       # well-formed JSON, not a list
+    assert p.returncode == 0
+    assert p.stdout.strip() == ""
+    assert "Traceback" not in p.stderr
+
+    p2 = _run(["--repair"], stdin="5")                 # well-formed JSON scalar
+    assert p2.returncode == 0
+    assert p2.stdout.strip() == ""
+    assert "Traceback" not in p2.stderr
+
+
 def test_run_interactive_not_executed_even_with_force():
     p = _run(["--run", "less /etc/hosts", "--force"])   # less exists; interactive
     obj = json.loads(p.stdout.strip())

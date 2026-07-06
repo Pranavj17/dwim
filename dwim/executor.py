@@ -19,10 +19,12 @@ READ_ONLY_VERBS = frozenset({
 })
 _READ_ONLY_GIT_SUB = frozenset({"status", "log", "diff"})  # mirror _ALLOWED
 
-# Benign redirects to strip before scanning: >/dev/null, 2>/dev/null,
-# &>/dev/null (anchored so /dev/nullx etc. are NOT matched), and fd-dups like
-# 2>&1 (digits required on both sides so >&word is NOT treated as benign).
-_BENIGN_REDIR = re.compile(r"(?:&>|\d*>>?)\s*/dev/null(?=\s|$)|\d+>&\d+")
+# Benign redirects to strip before scanning: >/dev/null, 2>/dev/null (anchored
+# so /dev/nullx etc. are NOT matched), and fd-dups like 2>&1 (digits required
+# on both sides so >&word is NOT treated as benign).
+# NOTE: no `&>` form — it's a bash-only combined redirect; under dash `&>` is
+# `&` (background) + `>`, which would run whatever follows. Let it reject via `&`.
+_BENIGN_REDIR = re.compile(r"\d*>>?\s*/dev/null(?=\s|$)|\d+>&\d+")
 
 
 def first_binary(cmd: str) -> str:
@@ -38,8 +40,7 @@ def is_interactive(cmd: str) -> bool:
     return first_binary(cmd) in INTERACTIVE
 
 
-# Flags that make an otherwise-read-only tool WRITE a file (sort -o, git --output).
-_OUTPUT_FLAGS = ("-o", "--output")
+_OUTPUT_FLAG_VERBS = frozenset({"sort"})   # verbs where -o/--output writes a file
 
 
 def _segment_read_only(seg: str) -> bool:
@@ -50,15 +51,20 @@ def _segment_read_only(seg: str) -> bool:
     if not parts:
         return False
     verb, args = parts[0], parts[1:]
-    # Any explicit output flag turns a reader into a writer → not auto-runnable.
-    for a in args:
-        if a in _OUTPUT_FLAGS or a.startswith("--output") or a.startswith("-o="):
-            return False
+    if verb in _OUTPUT_FLAG_VERBS:
+        for a in args:
+            if a in ("-o", "--output") or a.startswith("--output") or a.startswith("-o="):
+                return False
     if verb == "git":
-        return len(parts) > 1 and parts[1] in _READ_ONLY_GIT_SUB
+        if not (len(parts) > 1 and parts[1] in _READ_ONLY_GIT_SUB):
+            return False
+        # git diff/log --output=<file> writes a file.
+        for a in args:
+            if a.startswith("--output"):
+                return False
+        return True
     if verb == "uniq":
-        # uniq [OPTS] [INPUT [OUTPUT]] — a 2nd positional (non-flag) arg is an
-        # OUTPUT file it writes. Allow 0 (stdin) or 1 (input) positionals only.
+        # uniq [OPTS] [INPUT [OUTPUT]] — a 2nd positional is an OUTPUT file.
         positionals = [a for a in args if not a.startswith("-")]
         if len(positionals) >= 2:
             return False

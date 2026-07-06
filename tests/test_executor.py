@@ -98,6 +98,20 @@ def test_read_only_still_allows_sort_and_pipelines():
     assert is_read_only("sort -rh")                       # stdin → stdout
 
 
+def test_read_only_rejects_ampersand_redirect_prefix():
+    # &> is bash-only; under dash it backgrounds and runs the tail → never benign.
+    assert not is_read_only("du &>/dev/null touch /tmp/x")
+    assert not is_read_only("du &>/dev/null")
+
+
+def test_read_only_allows_output_flag_on_nonwriting_verbs():
+    assert is_read_only("grep -o pattern file")   # grep -o = only-matching, reads
+    assert is_read_only("ls -o")                    # ls -o = long format, reads
+    assert not is_read_only("sort -o /tmp/x file")  # sort -o writes
+    assert not is_read_only("git diff --output=/tmp/x HEAD~1")
+    assert not is_read_only("git log --output /tmp/x")
+
+
 def test_first_binary():
     from dwim.executor import first_binary
     assert first_binary("ncdu ~/Documents") == "ncdu"

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"; SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+HERE="${DWIM_LIBEXEC:-$(cd -P "$(dirname "$SOURCE")/.." && pwd)}"
+DWIM_PY="${DWIM_PYTHON:-$HOME/.venvs/dwim/bin/python}"
+if [[ ! -x "$DWIM_PY" ]]; then
+  echo "dwim: python runtime not found at $DWIM_PY" >&2
+  echo "      set DWIM_PYTHON or create the venv (see dwim setup)." >&2
+  exit 3
+fi
+exec env PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}" "$DWIM_PY" -m dwim --action="$*"

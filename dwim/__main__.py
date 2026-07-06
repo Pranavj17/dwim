@@ -34,10 +34,38 @@ def main(argv=None) -> int:
                         help="use the warm daemon only; exit 4 if it's down")
     parser.add_argument("--status", action="store_true",
                         help="print the active model + daemon state, then exit")
+    parser.add_argument("--models", action="store_true",
+                        help="list configured models + role + status")
+    parser.add_argument("--action", metavar="INTENT",
+                        help="run the Claude agent palette for INTENT")
     args = parser.parse_args(argv)
 
     if args.status:
         return _print_status()
+
+    if args.models:
+        from dwim.registry import load_models, backend_status
+        print(f"{'NAME':<10}{'BACKEND':<13}{'ROLE':<10}{'STATUS'}")
+        for m in load_models():
+            st = backend_status(m)
+            dot = "●" if st == "connected" else "○"
+            print(f"{m['name']:<10}{m['backend']:<13}{m['role']:<10}{dot} {st}")
+        return 0
+
+    if args.action is not None:
+        from dwim.action import run_action
+        from dwim.context import gather
+        from dwim.claude_runner import run as claude_run
+        from dwim.registry import resolve_role
+        m = resolve_role("action")
+        model = m["model"] if m else "sonnet"
+        result = run_action(args.action, runner=claude_run,
+                            context=gather(), model=model)
+        if result["answer"]:
+            print(result["answer"], file=sys.stderr)   # inline note
+        for c in result["commands"]:
+            print(c)                                    # stdout → fzf
+        return 0 if result["commands"] else 1
 
     if not args.cmd or args.exit_code is None:
         parser.error("--cmd and --exit are required")

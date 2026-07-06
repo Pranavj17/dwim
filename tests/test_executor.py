@@ -24,6 +24,32 @@ def test_empty_command_is_not_read_only():
     assert not is_interactive("")
 
 
+def test_read_only_rejects_chained_mutation():
+    assert not is_read_only("git status && git clean -fd")
+    assert not is_read_only("du -sh ~ && rm -rf ~/x")
+    assert not is_read_only("ls ; rm -rf x")
+    assert not is_read_only("cat a || rm b")
+
+
+def test_read_only_rejects_write_redirect_and_substitution():
+    assert not is_read_only("echo pwned >> ~/.zshrc")
+    assert not is_read_only("echo x > ~/.zshrc")
+    assert not is_read_only("grep $(whoami) file")
+    assert not is_read_only("cat `id`")
+
+
+def test_read_only_git_branch_is_not_read_only():
+    assert not is_read_only("git branch -D main")
+
+
+def test_read_only_allows_benign_pipelines():
+    assert is_read_only("du -ah ~ 2>/dev/null | sort -rh | head -5")
+    assert is_read_only("cat f | grep x | wc -l")
+    assert is_read_only("ls -la")
+    assert is_read_only("git status")
+    assert is_read_only("df -h 2>/dev/null")
+
+
 def test_first_binary():
     from dwim.executor import first_binary
     assert first_binary("ncdu ~/Documents") == "ncdu"

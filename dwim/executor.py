@@ -1,5 +1,6 @@
 """Classify a shell command (interactive? read-only?) and run captured commands."""
 
+import re
 import shlex
 import subprocess
 
@@ -9,13 +10,23 @@ INTERACTIVE = frozenset({
     "man", "ssh", "tmux", "fzf", "watch",
 })
 
-# Read-only verbs — kept in sync with dwim/claude_runner.py::_ALLOWED. `find` is
-# deliberately excluded (find -exec/-delete can execute/mutate).
+# Read-only FILTER verbs (consume stdin, never write/execute) — a superset of
+# claude_runner._ALLOWED's shell verbs, so common pipelines auto-run. Anything
+# that can write (tee, sed -i) or execute (awk system(), xargs) is excluded.
 READ_ONLY_VERBS = frozenset({
-    "ls", "cat", "du", "df", "grep", "rg", "head", "tail", "pwd",
-    "echo", "git",  # only read-only git subcommands (guarded below)
+    "ls", "cat", "du", "df", "grep", "rg", "head", "tail", "pwd", "echo", "git",
+    "sort", "uniq", "wc", "cut", "tr", "column", "nl", "rev", "comm", "fold",
 })
-_READ_ONLY_GIT_SUB = frozenset({"status", "log", "diff", "show", "branch"})
+_READ_ONLY_GIT_SUB = frozenset({"status", "log", "diff"})  # mirror _ALLOWED
+
+# Benign redirects to strip before the unsafe-redirect check: >/dev/null,
+# 2>/dev/null, &>/dev/null, and fd-dups like 2>&1.
+_BENIGN_REDIR = re.compile(r"(?:&>|\d*>>?)\s*/dev/null|\d*>&\d*")
+# Write redirects (>, >>) and command substitution ($( ), backticks, <( )) can
+# write files or execute — never auto-run these.
+_UNSAFE = re.compile(r">|`|\$\(|<\(")
+# Shell command separators — each side must independently be read-only.
+_SEPARATORS = re.compile(r"&&|\|\||\||;")
 
 
 def first_binary(cmd: str) -> str:
@@ -31,17 +42,23 @@ def is_interactive(cmd: str) -> bool:
     return first_binary(cmd) in INTERACTIVE
 
 
-def is_read_only(cmd: str) -> bool:
-    try:
-        parts = shlex.split(cmd)
-    except ValueError:
-        parts = cmd.split()
-    if not parts:
+def _segment_read_only(seg: str) -> bool:
+    verb = first_binary(seg)
+    if not verb:
         return False
-    verb = parts[0]
     if verb == "git":
+        parts = seg.split()
         return len(parts) > 1 and parts[1] in _READ_ONLY_GIT_SUB
     return verb in READ_ONLY_VERBS
+
+
+def is_read_only(cmd: str) -> bool:
+    if not cmd.strip():
+        return False
+    probe = _BENIGN_REDIR.sub("", cmd)      # ignore harmless >/dev/null, 2>&1
+    if _UNSAFE.search(probe):
+        return False                        # writes / command substitution → confirm
+    return all(_segment_read_only(s) for s in _SEPARATORS.split(cmd))
 
 
 def run_captured(cmd: str, *, timeout: int = 30, cap: int = 4000) -> dict:

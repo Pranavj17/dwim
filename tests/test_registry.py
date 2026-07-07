@@ -66,3 +66,10 @@ def test_config_effort_parsed(tmp_path):
 
 def test_default_action_effort_is_low():
     assert resolve_role("action", "/nonexistent/config.toml")["effort"] == "low"
+
+
+def test_defaults_have_action_deep():
+    from dwim.registry import load_models
+    roles = {m["role"]: m for m in load_models("/nonexistent/config.toml")}
+    assert roles["action"]["model"] == "haiku"
+    assert roles["action_deep"]["model"] == "sonnet"

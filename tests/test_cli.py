@@ -37,3 +37,33 @@ def test_refresh_inventory_cli(tmp_path, monkeypatch):
     monkeypatch.setattr(context.subprocess, "run", lambda *a, **k: _Res())
     assert m.main(["--refresh-inventory"]) == 0
     assert (tmp_path / "dwim" / "inventory").exists()
+
+
+def test_action_tier_deep_uses_deep_model(monkeypatch):
+    from dwim import __main__ as m
+    seen = {}
+
+    def fake_run_action(intent, *, runner, context, model="haiku"):
+        seen["model"] = model
+        return {"answer": "", "commands": []}
+
+    monkeypatch.setattr("dwim.action.run_action", fake_run_action)
+    monkeypatch.setattr("dwim.context.gather", lambda: {"cwd": "/c"})
+    monkeypatch.setattr("dwim.claude_runner.run", lambda *a, **k: "")
+    m.main(["--action", "why is x big", "--tier", "deep"])
+    assert seen["model"] == "sonnet"
+
+
+def test_action_default_tier_uses_fast_model(monkeypatch):
+    from dwim import __main__ as m
+    seen = {}
+
+    def fake_run_action(intent, *, runner, context, model="haiku"):
+        seen["model"] = model
+        return {"answer": "", "commands": []}
+
+    monkeypatch.setattr("dwim.action.run_action", fake_run_action)
+    monkeypatch.setattr("dwim.context.gather", lambda: {"cwd": "/c"})
+    monkeypatch.setattr("dwim.claude_runner.run", lambda *a, **k: "")
+    m.main(["--action", "how do I zip a folder"])
+    assert seen["model"] == "haiku"

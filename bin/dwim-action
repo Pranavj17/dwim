@@ -12,4 +12,5 @@ if [[ ! -x "$DWIM_PY" ]]; then
   echo "      set DWIM_PYTHON or create the venv (see dwim setup)." >&2
   exit 3
 fi
-exec env PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}" "$DWIM_PY" -m dwim --action="$*"
+exec env PYTHONPATH="$HERE${PYTHONPATH:+:$PYTHONPATH}" "$DWIM_PY" -m dwim \
+  --action="$*" --tier="${DWIM_TIER:-fast}"

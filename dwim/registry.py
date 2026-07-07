@@ -13,6 +13,8 @@ _DEFAULTS = [
      "role": "correct", "effort": ""},
     {"name": "haiku", "backend": "claude-cli", "model": "haiku",
      "role": "action", "effort": "low"},
+    {"name": "sonnet", "backend": "claude-cli", "model": "sonnet",
+     "role": "action_deep", "effort": ""},
 ]
 
 

@@ -40,6 +40,8 @@ def main(argv=None) -> int:
                         help="list configured models + role + status")
     parser.add_argument("--action", metavar="INTENT",
                         help="run the Claude agent palette for INTENT")
+    parser.add_argument("--tier", choices=["fast", "deep"], default="fast",
+                        help="with --action: 'deep' uses the action_deep model (e.g. sonnet)")
     parser.add_argument("--run", metavar="CMD",
                         help="classify CMD; run it captured (read-only, or mutating with --force); print JSON")
     parser.add_argument("--force", action="store_true",
@@ -73,9 +75,10 @@ def main(argv=None) -> int:
         from dwim.context import gather
         from dwim.claude_runner import run as claude_run
         from dwim.registry import resolve_role
-        m = resolve_role("action")
-        model = m["model"] if m else "haiku"
-        effort = (m.get("effort") if m else "low") or ""
+        role = "action_deep" if args.tier == "deep" else "action"
+        m = resolve_role(role) or resolve_role("action")
+        model = m["model"] if m else ("sonnet" if args.tier == "deep" else "haiku")
+        effort = (m.get("effort") if m else "") or ""
         gray, reset, cyan = "\033[38;5;244m", "\033[0m", "\033[38;5;110m"
         icon = os.environ.get("DWIM_ICON", "✨")
         print(f"{gray}{icon} dwim is thinking…{reset}", file=sys.stderr, flush=True)

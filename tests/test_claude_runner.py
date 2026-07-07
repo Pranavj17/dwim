@@ -191,3 +191,19 @@ def test_run_missing_claude_returns_tuple(monkeypatch):
     monkeypatch.setattr(cr.shutil, "which", lambda _x: None)
     text, sid = cr.run("q", "haiku")
     assert "claude CLI not found" in text and sid == ""
+
+
+def test_run_once_caps_wall_clock_via_process_group():
+    # A sh child that backgrounds a long sleep holding stdout: without a
+    # process-group kill the read blocks the full 30s despite timeout=1.
+    import os as _os, time
+    import pytest
+    if not hasattr(_os, "killpg"):
+        pytest.skip("POSIX process groups only")
+    from dwim.claude_runner import _run_once
+    start = time.monotonic()
+    text, sid, got = _run_once(["sh", "-c", "sleep 30 & wait"],
+                               lambda s: None, timeout=1)
+    elapsed = time.monotonic() - start
+    assert elapsed < 8, f"watchdog did not cap wall-clock: {elapsed:.1f}s"
+    assert got is False   # killed before any result event

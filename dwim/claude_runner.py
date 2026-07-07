@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -101,17 +102,30 @@ def _render_events(lines, emit):
 
 def _run_once(cmd, emit, timeout):
     """One claude -p invocation with a real wall-clock cap: a watchdog kills the
-    process after `timeout`s (the stream read is otherwise unbounded). Returns
+    whole process group after `timeout`s (the stream read is otherwise unbounded,
+    and a descendant holding stdout would keep it open). Returns
     (text, session_id, got_result)."""
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                            stderr=subprocess.DEVNULL, text=True)
-    watchdog = threading.Timer(timeout, proc.kill)
+                            stderr=subprocess.DEVNULL, text=True,
+                            start_new_session=True)  # own group → kill the tree
+
+    def _kill():
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+    watchdog = threading.Timer(timeout, _kill)
     watchdog.start()
     try:
         text, session_id, got_result = _render_events(proc.stdout, emit)
     finally:
         watchdog.cancel()
-        proc.wait()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            _kill()
+            proc.wait()
     return text, session_id, got_result
 
 

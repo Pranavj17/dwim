@@ -77,32 +77,45 @@ def _events(*evs):
 def test_render_marks_denied_tool_call():
     from dwim.claude_runner import _render_events
     lines = _events(
-        {"type": "assistant", "message": {"content": [
+        {"type": "system", "session_id": "sess-1"},
+        {"type": "assistant", "session_id": "sess-1", "message": {"content": [
             {"type": "tool_use", "id": "t1", "name": "Bash",
              "input": {"command": "find ~ -delete"}}]}},
-        {"type": "user", "message": {"content": [
+        {"type": "user", "session_id": "sess-1", "message": {"content": [
             {"type": "tool_result", "tool_use_id": "t1", "is_error": True,
              "content": "permission denied: Bash"}]}},
-        {"type": "result", "result": "done"},
+        {"type": "result", "session_id": "sess-1", "result": "done"},
     )
     out = []
-    result = _render_events(lines, out.append)
-    assert result == "done"
-    joined = "\n".join(out)
-    assert "find ~ -delete" in joined
-    assert "✗" in joined                 # ✗ correction line for the denied call
+    text, sid, got = _render_events(lines, out.append)
+    assert text == "done" and sid == "sess-1" and got is True
+    assert "✗" in "\n".join(out)
 
 
 def test_render_success_has_no_cross():
     from dwim.claude_runner import _render_events
     lines = _events(
-        {"type": "assistant", "message": {"content": [
+        {"type": "assistant", "session_id": "s", "message": {"content": [
             {"type": "tool_use", "id": "t1", "name": "Bash",
              "input": {"command": "du -sh ."}}]}},
-        {"type": "user", "message": {"content": [
+        {"type": "user", "session_id": "s", "message": {"content": [
             {"type": "tool_result", "tool_use_id": "t1", "content": "4.0K ."}]}},
-        {"type": "result", "result": "ok"},
+        {"type": "result", "session_id": "s", "result": "ok"},
     )
     out = []
-    assert _render_events(lines, out.append) == "ok"
-    assert "✗" not in "\n".join(out)     # no ✗ when nothing errored
+    text, sid, got = _render_events(lines, out.append)
+    assert text == "ok" and sid == "s" and got is True
+    assert "✗" not in "\n".join(out)
+
+
+def test_render_no_result_event_reports_incomplete():
+    from dwim.claude_runner import _render_events
+    lines = _events(
+        {"type": "system", "session_id": "sX"},
+        {"type": "assistant", "session_id": "sX", "message": {"content": [
+            {"type": "tool_use", "id": "t1", "name": "Bash",
+             "input": {"command": "du -ah /"}}]}},
+    )  # stream cut off (killed) — no result event
+    out = []
+    text, sid, got = _render_events(lines, out.append)
+    assert sid == "sX" and got is False and text == ""

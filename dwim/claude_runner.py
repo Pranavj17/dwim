@@ -58,14 +58,13 @@ def _result_status(block: dict) -> str:
     return "denied" if ("permission" in text or "denied" in text) else "failed"
 
 
-def _render_events(lines, emit) -> str:
-    """Consume stream-json lines; emit display lines; return the result text.
-
-    tool calls stream before their results, so we print `› <desc>` live and, if
-    the matching tool_result comes back an error, print a `✗ <desc> (status)`
-    correction line rather than silently showing a denied call as if it ran.
-    """
+def _render_events(lines, emit):
+    """Consume stream-json lines; emit display lines. Returns
+    (result_text, session_id, got_result). got_result is True iff a `result`
+    event was seen — False means the stream was cut short (e.g. killed)."""
     result_text = ""
+    session_id = ""
+    got_result = False
     pending = {}
     for line in lines:
         line = line.strip()
@@ -75,6 +74,8 @@ def _render_events(lines, emit) -> str:
             ev = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if not session_id:
+            session_id = ev.get("session_id", "") or session_id
         etype = ev.get("type")
         if etype == "assistant":
             for block in ev.get("message", {}).get("content", []):
@@ -90,8 +91,9 @@ def _render_events(lines, emit) -> str:
                     if desc:
                         emit(f"{_RED}  ✗ {desc}  ({_result_status(block)}){_RESET}")
         elif etype == "result":
+            got_result = True
             result_text = ev.get("result", "") or result_text
-    return result_text
+    return result_text, session_id, got_result
 
 
 def run(prompt: str, model: str, effort: str = "") -> str:
@@ -101,7 +103,7 @@ def run(prompt: str, model: str, effort: str = "") -> str:
         _build_cmd(prompt, model, effort),
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
     )
-    result_text = _render_events(
+    result_text, _session_id, _got = _render_events(
         proc.stdout,
         lambda s: print(s, file=sys.stderr, flush=True),
     )

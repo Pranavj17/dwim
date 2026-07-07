@@ -91,4 +91,7 @@ def parse_response(text: str) -> dict:
 
 def run_action(intent: str, *, runner, context: dict, model: str = "haiku") -> dict:
     prompt = build_prompt(intent, context)
-    return parse_response(runner(prompt, model))
+    text, session_id = runner(prompt, model)
+    obj = parse_response(text)
+    obj["session_id"] = session_id
+    return obj

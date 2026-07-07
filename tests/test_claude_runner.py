@@ -43,10 +43,11 @@ def test_run_returns_friendly_json_when_claude_missing(monkeypatch):
     monkeypatch.setattr(cr.subprocess, "run", _boom)
     monkeypatch.setattr(cr.subprocess, "Popen", _boom)
 
-    out = cr.run("anything", "sonnet")
+    out, sid = cr.run("anything", "sonnet")
     obj = json.loads(out)
     assert obj["commands"] == []
     assert "claude" in obj["answer"].lower()
+    assert sid == ""
 
 
 def test_build_cmd_effort_and_flags():
@@ -119,3 +120,55 @@ def test_render_no_result_event_reports_incomplete():
     out = []
     text, sid, got = _render_events(lines, out.append)
     assert sid == "sX" and got is False and text == ""
+
+
+def test_build_cmd_adds_resume_when_set():
+    from dwim.claude_runner import _build_cmd
+    assert "--resume" not in _build_cmd("p", "haiku", "")
+    cmd = _build_cmd("p", "haiku", "", resume="sess-9")
+    assert cmd[cmd.index("--resume") + 1] == "sess-9"
+
+
+def test_run_resumes_on_timeout_then_completes(monkeypatch):
+    # _run_once: first two calls "time out" (got_result False), third completes.
+    from dwim import claude_runner as cr
+    monkeypatch.setattr(cr.shutil, "which", lambda _x: "/usr/bin/claude")
+    seq = [("", "sess-1", False), ("", "sess-1", False), ("final", "sess-1", True)]
+    calls = {"n": 0}
+
+    def fake_once(cmd, emit, timeout):
+        r = seq[calls["n"]]; calls["n"] += 1
+        return r
+    monkeypatch.setattr(cr, "_run_once", fake_once)
+    text, sid = cr.run("why", "sonnet")
+    assert text == "final" and sid == "sess-1"
+    assert calls["n"] == 3               # first run + 2 resumes
+
+
+def test_run_gives_up_after_max_resumes(monkeypatch):
+    from dwim import claude_runner as cr
+    monkeypatch.setattr(cr.shutil, "which", lambda _x: "/usr/bin/claude")
+    monkeypatch.setattr(cr, "_run_once",
+                        lambda cmd, emit, timeout: ("partial", "sess-2", False))
+    text, sid = cr.run("why", "sonnet")
+    assert text == "partial" and sid == "sess-2"
+
+
+def test_run_no_resume_on_clean_completion(monkeypatch):
+    from dwim import claude_runner as cr
+    monkeypatch.setattr(cr.shutil, "which", lambda _x: "/usr/bin/claude")
+    calls = {"n": 0}
+
+    def fake_once(cmd, emit, timeout):
+        calls["n"] += 1
+        return ("ok", "sess-3", True)
+    monkeypatch.setattr(cr, "_run_once", fake_once)
+    text, sid = cr.run("q", "haiku")
+    assert text == "ok" and sid == "sess-3" and calls["n"] == 1
+
+
+def test_run_missing_claude_returns_tuple(monkeypatch):
+    from dwim import claude_runner as cr
+    monkeypatch.setattr(cr.shutil, "which", lambda _x: None)
+    text, sid = cr.run("q", "haiku")
+    assert "claude CLI not found" in text and sid == ""

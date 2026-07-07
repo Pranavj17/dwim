@@ -30,7 +30,7 @@ def test_run_action_uses_injected_runner():
 
     def fake_runner(prompt, model):
         captured["prompt"] = prompt
-        return '{"answer":"found","commands":["du -sh *"]}'
+        return '{"answer":"found","commands":["du -sh *"]}', "sess-0"
 
     out = run_action("what is big", runner=fake_runner,
                      context={"cwd": "/tmp", "git": ""})
@@ -61,9 +61,17 @@ def test_run_action_passes_model_through():
     seen = {}
     def fake_runner(prompt, model):
         seen["model"] = model
-        return '{"answer":"ok","commands":["pwd"]}'
+        return '{"answer":"ok","commands":["pwd"]}', "sess-1"
     run_action("hi", runner=fake_runner, context={"cwd": "/tmp"}, model="sonnet")
     assert seen["model"] == "sonnet"
+
+
+def test_run_action_surfaces_session_id():
+    from dwim.action import run_action
+    # runner now returns (text, session_id); text is the model's raw output.
+    runner = lambda prompt, model: ('{"answer":"hi","commands":[]}', "sess-7")
+    out = run_action("x", runner=runner, context={"cwd": "/c"})
+    assert out["answer"] == "hi" and out["session_id"] == "sess-7"
 
 
 def test_parse_command_objects_carry_desc():

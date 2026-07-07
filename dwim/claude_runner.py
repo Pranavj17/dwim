@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 
 # Read-only tools + read-only shell verbs. Mutating bash is NOT allowed, so the
 # agent proposes such commands instead of running them.
@@ -21,7 +22,7 @@ _RED = "\033[38;5;203m"
 _RESET = "\033[0m"
 
 
-def _build_cmd(prompt: str, model: str, effort: str) -> list:
+def _build_cmd(prompt: str, model: str, effort: str, resume: str = "") -> list:
     cmd = [
         "claude", "-p", prompt,
         "--model", model,
@@ -33,6 +34,8 @@ def _build_cmd(prompt: str, model: str, effort: str) -> list:
         "--strict-mcp-config",
         "--setting-sources", "",
     ]
+    if resume:
+        cmd += ["--resume", resume]
     if effort:
         cmd += ["--effort", effort]
     return cmd
@@ -96,19 +99,41 @@ def _render_events(lines, emit):
     return result_text, session_id, got_result
 
 
-def run(prompt: str, model: str, effort: str = "") -> str:
-    if not shutil.which("claude"):
-        return '{"answer": "dwim: claude CLI not found — @ palette needs it.", "commands": []}'
-    proc = subprocess.Popen(
-        _build_cmd(prompt, model, effort),
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
-    )
-    result_text, _session_id, _got = _render_events(
-        proc.stdout,
-        lambda s: print(s, file=sys.stderr, flush=True),
-    )
+def _run_once(cmd, emit, timeout):
+    """One claude -p invocation with a real wall-clock cap: a watchdog kills the
+    process after `timeout`s (the stream read is otherwise unbounded). Returns
+    (text, session_id, got_result)."""
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL, text=True)
+    watchdog = threading.Timer(timeout, proc.kill)
+    watchdog.start()
     try:
-        proc.wait(timeout=120)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-    return result_text
+        text, session_id, got_result = _render_events(proc.stdout, emit)
+    finally:
+        watchdog.cancel()
+        proc.wait()
+    return text, session_id, got_result
+
+
+def run(prompt: str, model: str, effort: str = "", resume: str = "",
+        max_resumes: int = 2, timeout: int = 120):
+    """Run the agent, returning (result_text, session_id). `resume` continues an
+    existing session. If a run is killed by the timeout before finishing, resume
+    the same session up to `max_resumes` times to let it complete."""
+    if not shutil.which("claude"):
+        return ('{"answer": "dwim: claude CLI not found — @ palette needs it.", '
+                '"commands": []}', "")
+    emit = lambda s: print(s, file=sys.stderr, flush=True)
+    text, session_id, got = _run_once(
+        _build_cmd(prompt, model, effort, resume), emit, timeout)
+    tries = 0
+    while not got and session_id and tries < max_resumes:
+        tries += 1
+        emit(f"{_GRAY}  ⟳ resuming… ({tries}/{max_resumes}){_RESET}")
+        text2, session_id, got = _run_once(
+            _build_cmd("Continue and give your final answer.",
+                       model, effort, session_id), emit, timeout)
+        text = text2 or text
+    if not got and tries >= max_resumes:
+        emit(f"{_RED}  ⚠ gave up after {max_resumes} resumes{_RESET}")
+    return text, session_id

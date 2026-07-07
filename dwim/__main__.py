@@ -90,9 +90,9 @@ def main(argv=None) -> int:
                 _f.write(model)
         except OSError:
             pass
-        print(f"{gray}{icon} dwim is thinking… · {model}{reset}", file=sys.stderr, flush=True)
-        # The runner streams the agent's tool calls to stderr live (gray) as it
-        # works; then we print the answer and the command candidates.
+        # The runner shows its own live spinner (the "thinking" indicator) that
+        # collapses to a one-line breadcrumb; then we print the answer and the
+        # command candidates. No separate "thinking…" line — the spinner is it.
         resume = os.environ.get("DWIM_RESUME", "")
         result = run_action(args.action,
                             runner=lambda p, md: claude_run(p, md, effort, resume=resume),

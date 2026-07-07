@@ -92,6 +92,28 @@ def _events(*evs):
     return [json.dumps(e) for e in evs]
 
 
+class _RecSink:
+    """Records the sink calls _render_events makes, so tests can assert on the
+    structured activity rather than on formatted display strings."""
+
+    def __init__(self):
+        self.steps = []
+        self.outputs = []
+        self.errors = []
+
+    def step(self, desc):
+        self.steps.append(desc)
+
+    def output(self, body):
+        self.outputs.append(body)
+
+    def error(self, desc, status, body):
+        self.errors.append((desc, status, body))
+
+    def note(self, msg):
+        pass
+
+
 def test_render_marks_denied_tool_call():
     from dwim.claude_runner import _render_events
     lines = _events(
@@ -104,13 +126,13 @@ def test_render_marks_denied_tool_call():
              "content": "permission denied: Bash"}]}},
         {"type": "result", "session_id": "sess-1", "result": "done"},
     )
-    out = []
-    text, sid, got = _render_events(lines, out.append)
+    sink = _RecSink()
+    text, sid, got = _render_events(lines, sink)
     assert text == "done" and sid == "sess-1" and got is True
-    assert "✗" in "\n".join(out)
+    assert sink.errors and sink.errors[0][1] == "denied"
 
 
-def test_render_success_has_no_cross():
+def test_render_success_records_no_error():
     from dwim.claude_runner import _render_events
     lines = _events(
         {"type": "assistant", "session_id": "s", "message": {"content": [
@@ -120,10 +142,11 @@ def test_render_success_has_no_cross():
             {"type": "tool_result", "tool_use_id": "t1", "content": "4.0K ."}]}},
         {"type": "result", "session_id": "s", "result": "ok"},
     )
-    out = []
-    text, sid, got = _render_events(lines, out.append)
+    sink = _RecSink()
+    text, sid, got = _render_events(lines, sink)
     assert text == "ok" and sid == "s" and got is True
-    assert "✗" not in "\n".join(out)
+    assert sink.errors == []
+    assert sink.steps == ["du -sh ."] and sink.outputs == ["4.0K ."]
 
 
 def test_render_no_result_event_reports_incomplete():
@@ -134,9 +157,46 @@ def test_render_no_result_event_reports_incomplete():
             {"type": "tool_use", "id": "t1", "name": "Bash",
              "input": {"command": "du -ah /"}}]}},
     )  # stream cut off (killed) — no result event
-    out = []
-    text, sid, got = _render_events(lines, out.append)
+    sink = _RecSink()
+    text, sid, got = _render_events(lines, sink)
     assert sid == "sX" and got is False and text == ""
+
+
+def test_streamui_collapses_to_breadcrumb_not_wall(tmp_path, monkeypatch):
+    # The core anti-"noisy wall" behaviour: several tool calls + big outputs
+    # produce a ONE-LINE breadcrumb on the (non-tty) stream, never the output
+    # bodies — those go to last_thinking instead.
+    import io
+    from dwim.claude_runner import _StreamUI
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    out = io.StringIO()               # not a tty → no spinner, breadcrumb only
+    ui = _StreamUI("dwim · haiku", out=out)
+    ui.start()
+    ui.step("dwim-git ~/helixa worktree list")
+    ui.output("helixa-mv\nhelixa-deskcfg\n" + "x\n" * 50)   # a big body
+    ui.step("du -sh .")
+    ui.output("4.0K .")
+    ui.finish()
+    shown = out.getvalue()
+    assert shown.count("\n") == 1                      # exactly one line printed
+    assert "⋯ 2 steps · dwim-git · du" in shown        # breadcrumb, program names
+    assert "helixa-deskcfg" not in shown               # output body NOT on screen
+    trace = (tmp_path / "dwim" / "last_thinking").read_text()
+    assert "helixa-deskcfg" in trace                   # full trace saved for `dwim thinking`
+    assert "du -sh ." in trace
+
+
+def test_streamui_non_tty_never_animates(monkeypatch):
+    import io
+    from dwim.claude_runner import _StreamUI
+    monkeypatch.setenv("XDG_CACHE_HOME", "/tmp/dwim-test-cache")
+    out = io.StringIO()
+    ui = _StreamUI("dwim · haiku", out=out)
+    ui.start()
+    ui.step("du -sh .")
+    ui.finish()
+    # No carriage-return spinner frames leak into a piped/captured stream.
+    assert "\r" not in out.getvalue()
 
 
 def test_build_cmd_adds_resume_when_set():
@@ -238,20 +298,24 @@ def _tool_result_events(cmd_id, command, result):
     ]
 
 
-def test_render_shows_tool_result_output():
+def test_render_passes_tool_result_body_to_sink():
     from dwim.claude_runner import _render_events
-    out = []
-    _render_events(_tool_result_events("t1", "ls", "file-a.txt\nfile-b.txt"), out.append)
-    joined = "\n".join(out)
-    assert "file-a.txt" in joined and "file-b.txt" in joined  # output no longer dropped
+    sink = _RecSink()
+    _render_events(_tool_result_events("t1", "ls", "file-a.txt\nfile-b.txt"), sink)
+    assert sink.outputs == ["file-a.txt\nfile-b.txt"]   # output captured, not dropped
+    assert sink.steps == ["ls"]
 
 
-def test_render_truncates_long_tool_result():
-    from dwim.claude_runner import _render_events
-    out = []
-    big = "\n".join(f"line{i}" for i in range(20))
-    _render_events(_tool_result_events("t1", "cat big", big), out.append)
-    assert "(+14 lines)" in "\n".join(out)          # 20 - 6 shown
+def test_streamui_trace_truncates_long_output(tmp_path, monkeypatch):
+    import io
+    from dwim.claude_runner import _StreamUI
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    ui = _StreamUI("dwim · haiku", out=io.StringIO())
+    ui.step("cat big")
+    ui.output("\n".join(f"line{i}" for i in range(20)))
+    ui.finish()
+    trace = (tmp_path / "dwim" / "last_thinking").read_text()
+    assert "(+14 lines)" in trace          # 20 - 6 shown, truncation preserved in the trace
 
 
 def test_run_once_redirects_stdin_to_devnull(monkeypatch):
@@ -281,9 +345,8 @@ def test_render_suppresses_no_output_placeholder():
     # A command that printed nothing yields the Bash placeholder as its result;
     # it must NOT be rendered as a dim body line (only the `›` call shows).
     from dwim.claude_runner import _render_events
-    out = []
+    sink = _RecSink()
     _render_events(_tool_result_events("t1", "git status --short",
-                                       "(Bash completed with no output)"), out.append)
-    joined = "\n".join(out)
-    assert "› git status --short" in joined
-    assert "no output" not in joined.lower()      # placeholder suppressed
+                                       "(Bash completed with no output)"), sink)
+    assert sink.steps == ["git status --short"]
+    assert sink.outputs == []                     # placeholder suppressed, not passed on

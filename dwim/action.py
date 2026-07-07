@@ -10,6 +10,12 @@ SYSTEM_PROMPT = (
     "my disk', 'why is my build failing') → USE the READ-ONLY tools "
     "(Read/Glob/Grep/WebSearch, read-only shell like ls/cat/du/git status) to "
     "find the REAL answer, then report it. Keep tool use minimal (1-3 calls).\n"
+    "The project root is ~/Documents; the Context block lists its top dirs by "
+    "size. Glob/Grep only see the CURRENT directory, so to find a directory or "
+    "file by name ANYWHERE in the tree run `dwim-locate NAME` (optionally "
+    "`dwim-locate NAME ~`). For 'why is X big / what's using space', run "
+    "`du -ah <dir> | sort -rh | head`. Make your FIRST suggested command the one "
+    "that reproduces the finding you report, so running it confirms your answer.\n"
     "Never run commands that change the system. Respond with ONLY a JSON "
     "object on the last line:\n"
     '{"answer": "<one short plain-English line — the actual finding if you '

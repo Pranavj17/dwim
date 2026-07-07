@@ -74,3 +74,20 @@ def test_parse_command_objects_carry_desc():
 def test_parse_bare_string_commands_get_empty_desc():
     out = parse_response('{"answer":"", "commands":["pwd"]}')
     assert out["commands"] == [{"cmd": "pwd", "desc": ""}]
+
+
+def test_prompt_mentions_locate_and_reach():
+    from dwim.action import build_prompt
+    p = build_prompt("why is x big", {"cwd": "/c", "roots": "~/Documents, ~",
+                                       "inventory": "helixa 2.0G"})
+    assert "dwim-locate" in p
+    assert "~/Documents" in p           # spatial root guidance present
+    assert "helixa 2.0G" in p           # inventory injected
+    low = p.lower()
+    assert "reproduce" in low            # top command must reproduce the finding
+
+
+def test_prompt_reach_guidance_is_in_system_prompt():
+    from dwim.action import SYSTEM_PROMPT
+    assert "dwim-locate" in SYSTEM_PROMPT
+    assert "Glob" in SYSTEM_PROMPT       # explains Glob/Grep are cwd-only

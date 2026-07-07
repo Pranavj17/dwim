@@ -21,7 +21,8 @@ def test_allowlist_has_no_bypass_tokens():
 # Adding anything new to _ALLOWED forces a conscious update here (and a security review).
 _KNOWN_SAFE = {
     "Read", "Glob", "Grep", "WebSearch",
-    "Bash(ls:*)", "Bash(cat:*)", "Bash(git status)", "Bash(git log:*)",
+    "Bash(ls:*)", "Bash(cat:*)", "Bash(git status:*)",
+    "Bash(git worktree list:*)", "Bash(git log:*)",
     "Bash(git diff:*)", "Bash(du:*)", "Bash(df:*)", "Bash(grep:*)",
     "Bash(rg:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(pwd)",
     "Bash(dwim-locate:*)",
@@ -59,6 +60,16 @@ def test_build_cmd_effort_and_flags():
     assert cmd[cmd.index("--effort") + 1] == "low"
     assert cmd[cmd.index("--setting-sources") + 1] == ""
     assert "--effort" not in _build_cmd("p", "haiku", "")
+
+
+def test_allowlist_has_readonly_git_but_not_mutating_forms():
+    from dwim.claude_runner import _ALLOWED
+    assert "Bash(git status:*)" in _ALLOWED       # args allowed (--short --branch)
+    assert "Bash(git worktree list:*)" in _ALLOWED
+    assert "Bash(git status)" not in _ALLOWED      # replaced by the :* form
+    # verbs whose args can mutate must NOT be broadly allowed
+    assert "Bash(git branch:*)" not in _ALLOWED
+    assert "Bash(git worktree:*)" not in _ALLOWED
 
 
 def test_allowlist_has_dwim_locate_not_find_or_fd():

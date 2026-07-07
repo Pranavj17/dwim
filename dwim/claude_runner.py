@@ -12,7 +12,8 @@ import threading
 # agent proposes such commands instead of running them.
 _ALLOWED = [
     "Read", "Glob", "Grep", "WebSearch",
-    "Bash(ls:*)", "Bash(cat:*)", "Bash(git status)", "Bash(git log:*)",
+    "Bash(ls:*)", "Bash(cat:*)", "Bash(git status:*)",
+    "Bash(git worktree list:*)", "Bash(git log:*)",
     "Bash(git diff:*)", "Bash(du:*)", "Bash(df:*)", "Bash(grep:*)",
     "Bash(rg:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(pwd)",
     "Bash(dwim-locate:*)",     # read-only by construction: name+root only, no flags

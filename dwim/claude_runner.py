@@ -17,6 +17,7 @@ _ALLOWED = [
 ]
 
 _GRAY = "\033[38;5;244m"
+_RED = "\033[38;5;203m"
 _RESET = "\033[0m"
 
 
@@ -52,15 +53,21 @@ def _tool_desc(block: dict) -> str:
     return name
 
 
-def run(prompt: str, model: str, effort: str = "") -> str:
-    if not shutil.which("claude"):
-        return '{"answer": "dwim: claude CLI not found — @ palette needs it.", "commands": []}'
-    proc = subprocess.Popen(
-        _build_cmd(prompt, model, effort),
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
-    )
+def _result_status(block: dict) -> str:
+    text = str(block.get("content", "")).lower()
+    return "denied" if ("permission" in text or "denied" in text) else "failed"
+
+
+def _render_events(lines, emit) -> str:
+    """Consume stream-json lines; emit display lines; return the result text.
+
+    tool calls stream before their results, so we print `› <desc>` live and, if
+    the matching tool_result comes back an error, print a `✗ <desc> (status)`
+    correction line rather than silently showing a denied call as if it ran.
+    """
     result_text = ""
-    for line in proc.stdout:
+    pending = {}
+    for line in lines:
         line = line.strip()
         if not line:
             continue
@@ -74,10 +81,30 @@ def run(prompt: str, model: str, effort: str = "") -> str:
                 if block.get("type") == "tool_use":
                     desc = _tool_desc(block)
                     if desc:
-                        # Live, grayed-out — the user watches the agent work.
-                        print(f"{_GRAY}  › {desc}{_RESET}", file=sys.stderr, flush=True)
+                        pending[block.get("id")] = desc
+                        emit(f"{_GRAY}  › {desc}{_RESET}")
+        elif etype == "user":
+            for block in ev.get("message", {}).get("content", []):
+                if block.get("type") == "tool_result" and block.get("is_error"):
+                    desc = pending.pop(block.get("tool_use_id"), "")
+                    if desc:
+                        emit(f"{_RED}  ✗ {desc}  ({_result_status(block)}){_RESET}")
         elif etype == "result":
             result_text = ev.get("result", "") or result_text
+    return result_text
+
+
+def run(prompt: str, model: str, effort: str = "") -> str:
+    if not shutil.which("claude"):
+        return '{"answer": "dwim: claude CLI not found — @ palette needs it.", "commands": []}'
+    proc = subprocess.Popen(
+        _build_cmd(prompt, model, effort),
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+    )
+    result_text = _render_events(
+        proc.stdout,
+        lambda s: print(s, file=sys.stderr, flush=True),
+    )
     try:
         proc.wait(timeout=120)
     except subprocess.TimeoutExpired:

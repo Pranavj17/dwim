@@ -65,3 +65,44 @@ def test_allowlist_has_dwim_locate_not_find_or_fd():
     assert "Bash(dwim-locate:*)" in _ALLOWED
     # find/fd must never be directly allowed — dwim-locate is the safe front door.
     assert not any(a.startswith("Bash(find") or a.startswith("Bash(fd") for a in _ALLOWED)
+
+
+import json
+
+
+def _events(*evs):
+    return [json.dumps(e) for e in evs]
+
+
+def test_render_marks_denied_tool_call():
+    from dwim.claude_runner import _render_events
+    lines = _events(
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "t1", "name": "Bash",
+             "input": {"command": "find ~ -delete"}}]}},
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t1", "is_error": True,
+             "content": "permission denied: Bash"}]}},
+        {"type": "result", "result": "done"},
+    )
+    out = []
+    result = _render_events(lines, out.append)
+    assert result == "done"
+    joined = "\n".join(out)
+    assert "find ~ -delete" in joined
+    assert "✗" in joined                 # ✗ correction line for the denied call
+
+
+def test_render_success_has_no_cross():
+    from dwim.claude_runner import _render_events
+    lines = _events(
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "t1", "name": "Bash",
+             "input": {"command": "du -sh ."}}]}},
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": "4.0K ."}]}},
+        {"type": "result", "result": "ok"},
+    )
+    out = []
+    assert _render_events(lines, out.append) == "ok"
+    assert "✗" not in "\n".join(out)     # no ✗ when nothing errored

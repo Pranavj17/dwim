@@ -24,6 +24,7 @@ _KNOWN_SAFE = {
     "Bash(ls:*)", "Bash(cat:*)", "Bash(git status)", "Bash(git log:*)",
     "Bash(git diff:*)", "Bash(du:*)", "Bash(df:*)", "Bash(grep:*)",
     "Bash(rg:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(pwd)",
+    "Bash(dwim-locate:*)",
 }
 
 
@@ -57,3 +58,10 @@ def test_build_cmd_effort_and_flags():
     assert cmd[cmd.index("--effort") + 1] == "low"
     assert cmd[cmd.index("--setting-sources") + 1] == ""
     assert "--effort" not in _build_cmd("p", "haiku", "")
+
+
+def test_allowlist_has_dwim_locate_not_find_or_fd():
+    from dwim.claude_runner import _ALLOWED
+    assert "Bash(dwim-locate:*)" in _ALLOWED
+    # find/fd must never be directly allowed — dwim-locate is the safe front door.
+    assert not any(a.startswith("Bash(find") or a.startswith("Bash(fd") for a in _ALLOWED)

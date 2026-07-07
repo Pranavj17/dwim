@@ -13,6 +13,7 @@ _ALLOWED = [
     "Bash(ls:*)", "Bash(cat:*)", "Bash(git status)", "Bash(git log:*)",
     "Bash(git diff:*)", "Bash(du:*)", "Bash(df:*)", "Bash(grep:*)",
     "Bash(rg:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(pwd)",
+    "Bash(dwim-locate:*)",     # read-only by construction: name+root only, no flags
 ]
 
 _GRAY = "\033[38;5;244m"

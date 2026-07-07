@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Read-only locate for the dwim @ agent. Takes ONLY a name + optional root, so
+# no -exec/-delete/flag can be injected. Uses fd if present, else find.
+set -euo pipefail
+
+name="${1:-}"
+root="${2:-$HOME/Documents}"
+
+[[ -z "$name" ]] && { echo "usage: dwim-locate <name> [root]" >&2; exit 2; }
+# Names are directory/file fragments — letters, digits, dot, underscore, dash.
+# Reject anything else (spaces, ;, $, quotes) and any leading dash (flag-like),
+# so the value can never be parsed as an option by fd/find.
+[[ "$name" == -* ]] && { echo "dwim-locate: name must not start with '-'" >&2; exit 2; }
+[[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "dwim-locate: name must be [A-Za-z0-9._-]" >&2; exit 2; }
+[[ -d "$root" ]] || root="$HOME"
+
+if command -v fd >/dev/null 2>&1; then
+  fd --max-depth 5 --hidden --absolute-path \
+     --exclude .git --exclude node_modules "$name" "$root" 2>/dev/null | head -50
+else
+  find "$root" -maxdepth 5 -iname "*${name}*" \
+       -not -path '*/.git/*' -not -path '*/node_modules/*' 2>/dev/null | head -50
+fi

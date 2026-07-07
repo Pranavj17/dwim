@@ -34,6 +34,8 @@ def main(argv=None) -> int:
                         help="use the warm daemon only; exit 4 if it's down")
     parser.add_argument("--status", action="store_true",
                         help="print the active model + daemon state, then exit")
+    parser.add_argument("--refresh-inventory", action="store_true",
+                        help="recompute the ~/Documents size inventory cache, then exit")
     parser.add_argument("--models", action="store_true",
                         help="list configured models + role + status")
     parser.add_argument("--action", metavar="INTENT",
@@ -48,6 +50,10 @@ def main(argv=None) -> int:
 
     if args.status:
         return _print_status()
+
+    if args.refresh_inventory:
+        from dwim.context import refresh_inventory
+        return refresh_inventory()
 
     if args.models:
         from dwim.registry import load_models, backend_status

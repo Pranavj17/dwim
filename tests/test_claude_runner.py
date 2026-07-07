@@ -207,3 +207,26 @@ def test_run_once_caps_wall_clock_via_process_group():
     elapsed = time.monotonic() - start
     assert elapsed < 8, f"watchdog did not cap wall-clock: {elapsed:.1f}s"
     assert got is False   # killed before any result event
+
+
+def test_run_once_redirects_stdin_to_devnull(monkeypatch):
+    # claude -p reads stdin; inheriting the terminal's stdin makes it swallow the
+    # user's keystrokes and wait ~3s each run. _run_once must pass stdin=DEVNULL.
+    import subprocess
+    from dwim import claude_runner as cr
+    captured = {}
+
+    class _FakeProc:
+        pid = 4321
+        stdout = iter(())              # no events → got_result False, returns fast
+        def wait(self, timeout=None): return 0
+
+    def fake_popen(cmd, **kw):
+        captured.update(kw)
+        return _FakeProc()
+
+    monkeypatch.setattr(cr.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(cr.os, "getpgid", lambda _p: 4321)
+    monkeypatch.setattr(cr.os, "killpg", lambda *_a: None)
+    cr._run_once(["claude", "-p"], lambda s: None, timeout=5)
+    assert captured.get("stdin") is subprocess.DEVNULL

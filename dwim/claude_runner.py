@@ -105,7 +105,12 @@ def _run_once(cmd, emit, timeout):
     whole process group after `timeout`s (the stream read is otherwise unbounded,
     and a descendant holding stdout would keep it open). Returns
     (text, session_id, got_result)."""
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+    # stdin=DEVNULL is critical: claude -p reads stdin, so an inherited terminal
+    # stdin makes it (a) wait ~3s for input every run and (b) SWALLOW the user's
+    # keystrokes (up-arrow/Enter go to claude, not the blocked shell). DEVNULL
+    # gives it immediate EOF.
+    proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL,
+                            stdout=subprocess.PIPE,
                             stderr=subprocess.DEVNULL, text=True,
                             start_new_session=True)  # own group → kill the tree
 

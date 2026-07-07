@@ -93,8 +93,9 @@ def main(argv=None) -> int:
         print(f"{gray}{icon} dwim is thinking… · {model}{reset}", file=sys.stderr, flush=True)
         # The runner streams the agent's tool calls to stderr live (gray) as it
         # works; then we print the answer and the command candidates.
+        resume = os.environ.get("DWIM_RESUME", "")
         result = run_action(args.action,
-                            runner=lambda p, md: claude_run(p, md, effort),
+                            runner=lambda p, md: claude_run(p, md, effort, resume=resume),
                             context=gather(), model=model)
         if result["answer"]:
             print(f"{cyan}✦{reset} {result['answer']}", file=sys.stderr)
@@ -102,6 +103,15 @@ def main(argv=None) -> int:
             # "<plain-English desc>\t<command>" — fzf shows the desc, previews
             # the command, and loads the command on select.
             print(f"{c['desc'] or c['cmd']}\t{c['cmd']}")
+        sid = result.get("session_id", "")
+        target = os.environ.get("DWIM_SESSION_FILE") or \
+            os.path.join(_cache, "dwim", "last_session")
+        try:
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "w") as _sf:
+                _sf.write(sid)
+        except OSError:
+            pass
         return 0 if result["commands"] else 1
 
     if args.run is not None:

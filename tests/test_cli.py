@@ -69,6 +69,36 @@ def test_action_default_tier_uses_fast_model(monkeypatch):
     assert seen["model"] == "haiku"
 
 
+def test_action_passes_resume_and_writes_session_file(tmp_path, monkeypatch):
+    from dwim import __main__ as m
+    seen = {}
+
+    def fake_run(prompt, model, effort="", resume="", **kw):
+        seen["resume"] = resume
+        return ("{}", "new-sess")
+    monkeypatch.setattr("dwim.claude_runner.run", fake_run)
+    monkeypatch.setattr("dwim.context.gather", lambda: {"cwd": "/c"})
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("DWIM_RESUME", "old-sess")
+    sess_file = tmp_path / "sess-123"
+    monkeypatch.setenv("DWIM_SESSION_FILE", str(sess_file))
+    m.main(["--action", "why is x big"])
+    assert seen["resume"] == "old-sess"        # inbound resume forwarded
+    assert sess_file.read_text() == "new-sess"  # resulting id written per-terminal
+
+
+def test_action_session_file_defaults_to_cache(tmp_path, monkeypatch):
+    from dwim import __main__ as m
+    monkeypatch.setattr("dwim.claude_runner.run",
+                        lambda prompt, model, effort="", resume="", **kw: ("{}", "sX"))
+    monkeypatch.setattr("dwim.context.gather", lambda: {"cwd": "/c"})
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.delenv("DWIM_SESSION_FILE", raising=False)
+    monkeypatch.delenv("DWIM_RESUME", raising=False)
+    m.main(["--action", "x"])
+    assert (tmp_path / "dwim" / "last_session").read_text() == "sX"
+
+
 def test_action_stamps_last_model(tmp_path, monkeypatch):
     # --action records the resolved model so the shell can label the panel.
     from dwim import __main__ as m

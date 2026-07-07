@@ -25,6 +25,33 @@ def test_parse_malformed_falls_back_to_answer():
     assert "just some text" in out["answer"]
 
 
+def test_parse_rescues_fenced_command_when_no_json():
+    # The (esp. deep) model sometimes puts the command in a ```bash fence and
+    # writes prose instead of the JSON — rescue it so the picker isn't empty.
+    raw = ("```bash\n"
+           "rm -rf ~/Library/Caches/Homebrew/downloads && \\\n"
+           "rm -rf ~/Library/Caches/CocoaPods\n"
+           "```\n\nRun that to free ~2.6G of cache.")
+    out = parse_response(raw)
+    assert len(out["commands"]) == 1                       # && chain stays ONE command
+    cmd = out["commands"][0]["cmd"]
+    assert "Homebrew/downloads" in cmd and "CocoaPods" in cmd and "&&" in cmd
+    assert "\n" not in cmd                                 # continuation joined to one line
+    assert "```" not in out["answer"]                      # fence stripped from the answer
+    assert "free ~2.6G" in out["answer"]
+
+
+def test_parse_rescues_fence_when_json_has_empty_commands():
+    raw = '{"answer": "here", "commands": []}\n```bash\ngit worktree prune\n```'
+    out = parse_response(raw)
+    assert [c["cmd"] for c in out["commands"]] == ["git worktree prune"]
+
+
+def test_parse_fence_drops_comments_and_blanks():
+    out = parse_response("```sh\n# just clean it\n\nbrew cleanup\n```")
+    assert [c["cmd"] for c in out["commands"]] == ["brew cleanup"]
+
+
 def test_run_action_uses_injected_runner():
     captured = {}
 

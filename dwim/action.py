@@ -1,6 +1,12 @@
 """Build the Claude agent prompt, run it (injected), parse {answer, commands}."""
 
 import json
+import re
+
+# Shell command(s) the model sometimes puts in a ``` fence instead of the
+# commands array (esp. the deep model) — we rescue them so the picker isn't
+# left with "no command to suggest".
+_FENCE_RE = re.compile(r"```(?:bash|sh|zsh|shell|console)?[ \t]*\n(.*?)```", re.DOTALL)
 
 SYSTEM_PROMPT = (
     "You are a terminal assistant. Two kinds of intent:\n"
@@ -40,7 +46,8 @@ SYSTEM_PROMPT = (
     'investigated>", "commands": [{"cmd": "<runnable command>", "desc": '
     '"<what it does, plain English, \\u2264 8 words, no jargon>"}, ...]}\n'
     "Most likely command first. Every command MUST have a `desc` a non-expert "
-    "understands. No prose outside the JSON."
+    "understands. No prose outside the JSON. NEVER put a command in a markdown "
+    "code fence (```); every runnable command goes in the `commands` array."
 )
 
 
@@ -93,6 +100,23 @@ def _norm_cmd(c) -> dict | None:
     return {"cmd": cmd, "desc": desc} if cmd else None
 
 
+def _fenced_commands(text: str) -> list:
+    """Pull shell commands out of ``` fences. Backslash-newline continuations
+    are joined so a multi-line `a && \\\n b` chain stays ONE command; blank and
+    comment-only lines are dropped."""
+    cmds = []
+    for block in _FENCE_RE.findall(text):
+        for line in block.replace("\\\n", " ").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                cmds.append({"cmd": line, "desc": ""})
+    return cmds
+
+
+def _strip_fences(text: str) -> str:
+    return _FENCE_RE.sub("", text).strip()
+
+
 def parse_response(text: str) -> dict:
     text = (text or "").strip()
     # Find the last top-level {...} JSON object that parses to a dict with a list `commands`.
@@ -103,8 +127,16 @@ def parse_response(text: str) -> dict:
             continue
         if isinstance(obj, dict) and isinstance(obj.get("commands"), list):
             cmds = [c for c in (_norm_cmd(x) for x in obj["commands"]) if c]
-            return {"answer": str(obj.get("answer", "")), "commands": cmds}
-    return {"answer": text, "commands": []}
+            if cmds:
+                return {"answer": str(obj.get("answer", "")), "commands": cmds}
+            # JSON parsed but no usable commands — the model may have fenced the
+            # real command inside the answer instead. Rescue it below.
+            answer = str(obj.get("answer", "")) or text
+            fenced = _fenced_commands(answer) or _fenced_commands(text)
+            return {"answer": _strip_fences(answer) or answer, "commands": fenced}
+    # No commands JSON at all → whole thing is prose; rescue any fenced commands.
+    fenced = _fenced_commands(text)
+    return {"answer": _strip_fences(text) if fenced else text, "commands": fenced}
 
 
 def run_action(intent: str, *, runner, context: dict, model: str = "haiku") -> dict:

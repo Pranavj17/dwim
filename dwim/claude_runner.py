@@ -79,6 +79,15 @@ def _result_body(block):
     return ""
 
 
+def _is_empty_result(body):
+    """True when a tool result carries no real output — either blank or the
+    placeholder the Bash tool emits for a command that printed nothing (e.g.
+    `git status --short` on a clean repo). We skip rendering those so the stream
+    isn't padded with '(… completed with no output)' lines."""
+    b = body.strip().lower()
+    return (not b) or ("completed with no output" in b) or (b == "no output")
+
+
 def _indent_result(text):
     """Dim, indent, and truncate a tool result for the live stream."""
     text = text.strip()
@@ -128,9 +137,9 @@ def _render_events(lines, emit):
                 if block.get("is_error"):
                     if desc:
                         emit(f"{_RED}  ✗ {desc}  ({_result_status(block)}){_RESET}")
-                    if body.strip():
+                    if not _is_empty_result(body):
                         emit(_indent_result(body))
-                elif body.strip():
+                elif not _is_empty_result(body):
                     emit(_indent_result(body))
         elif etype == "result":
             got_result = True

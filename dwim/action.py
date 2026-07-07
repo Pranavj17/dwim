@@ -27,6 +27,10 @@ SYSTEM_PROMPT = (
     "commands, one per distinct remediation option, ordered SAFEST first (e.g. "
     "clear only stale, then remove a safe subset, then remove everything), each "
     "`desc` saying what it affects and how many.\n"
+    "When a command takes ONE target at a time (e.g. `git worktree remove`, "
+    "`git branch -d`), a bulk action must be a shell loop like "
+    "`for w in a b c; do git worktree remove \"$w\"; done` — NOT one call with "
+    "many arguments (that errors).\n"
     "Never run commands that change the system. Respond with ONLY a JSON "
     "object on the last line:\n"
     '{"answer": "<one short plain-English line — the actual finding if you '

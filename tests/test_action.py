@@ -129,3 +129,9 @@ def test_run_action_forwards_multiple_commands():
     assert [c["cmd"] for c in out["commands"]] == \
         ["git worktree prune", "git worktree remove a b c"]
     assert out["session_id"] == "sid-1"
+
+
+def test_prompt_nudges_loop_for_one_at_a_time_commands():
+    from dwim.action import SYSTEM_PROMPT
+    p = SYSTEM_PROMPT.lower()
+    assert "one target at a time" in p and "worktree remove" in p and "for w in" in p

@@ -275,3 +275,15 @@ def test_run_once_redirects_stdin_to_devnull(monkeypatch):
     monkeypatch.setattr(cr.os, "killpg", lambda *_a: None)
     cr._run_once(["claude", "-p"], lambda s: None, timeout=5)
     assert captured.get("stdin") is subprocess.DEVNULL
+
+
+def test_render_suppresses_no_output_placeholder():
+    # A command that printed nothing yields the Bash placeholder as its result;
+    # it must NOT be rendered as a dim body line (only the `›` call shows).
+    from dwim.claude_runner import _render_events
+    out = []
+    _render_events(_tool_result_events("t1", "git status --short",
+                                       "(Bash completed with no output)"), out.append)
+    joined = "\n".join(out)
+    assert "› git status --short" in joined
+    assert "no output" not in joined.lower()      # placeholder suppressed

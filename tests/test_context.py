@@ -70,6 +70,33 @@ def test_refresh_inventory_writes_cache(tmp_path, monkeypatch):
 
 def test_gather_has_roots_and_inventory(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setattr(context, "_DOCS", str(tmp_path / "Documents"))
+    monkeypatch.setattr(context, "_default_trigger", lambda: None)
+    (tmp_path / "Documents").mkdir()
     monkeypatch.chdir(tmp_path)
     ctx = gather()
     assert "roots" in ctx and "inventory" in ctx
+
+
+def test_read_inventory_fresh_but_empty_does_not_trigger(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setattr(context, "_DOCS", str(tmp_path / "Documents"))
+    (tmp_path / "Documents").mkdir()
+    d = tmp_path / "dwim"; d.mkdir()
+    (d / "inventory").write_text("")          # fresh file, empty body
+    calls = []
+    context._read_inventory(lambda: calls.append(1))
+    assert calls == []                         # fresh cache honored — no refresh
+
+
+def test_read_inventory_stale_empty_triggers_once(tmp_path, monkeypatch):
+    import os as _os
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setattr(context, "_DOCS", str(tmp_path / "Documents"))
+    (tmp_path / "Documents").mkdir()
+    d = tmp_path / "dwim"; d.mkdir()
+    f = d / "inventory"; f.write_text("")
+    old = time.time() - (7 * 3600); _os.utime(f, (old, old))
+    calls = []
+    context._read_inventory(lambda: calls.append(1))
+    assert calls == [1]                        # stale → exactly one trigger

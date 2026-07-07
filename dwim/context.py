@@ -47,6 +47,11 @@ def _default_trigger() -> None:
         pass
 
 
+def _names_only() -> str:
+    names = _run(["ls", "-1", _DOCS])
+    return " · ".join(n for n in names.splitlines()[:15] if n)
+
+
 def _read_inventory(trigger_refresh=_default_trigger) -> str:
     path = _inventory_path()
     if os.path.exists(path):
@@ -56,12 +61,12 @@ def _read_inventory(trigger_refresh=_default_trigger) -> str:
         if not fresh:
             trigger_refresh()               # stale → refresh in background for next call
         formatted = _format_inventory(raw)
-        if formatted:
-            return formatted
-    # No usable cache: kick off a build and give a fast names-only map for now.
+        # Honor an existing (fresh or already-triggered) cache: fall back to a
+        # names-only view WITHOUT an extra trigger when the body is empty.
+        return formatted if formatted else _names_only()
+    # No cache at all: kick off a build and give a fast names-only map for now.
     trigger_refresh()
-    names = _run(["ls", "-1", _DOCS])
-    return " · ".join(n for n in names.splitlines()[:15] if n)
+    return _names_only()
 
 
 def refresh_inventory() -> int:

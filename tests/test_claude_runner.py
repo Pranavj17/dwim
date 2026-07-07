@@ -226,6 +226,34 @@ def test_run_once_caps_wall_clock_via_process_group():
     assert got is False   # killed before any result event
 
 
+def _tool_result_events(cmd_id, command, result):
+    import json
+    return [
+        json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": cmd_id, "name": "Bash",
+             "input": {"command": command}}]}}),
+        json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": cmd_id, "content": result}]}}),
+        json.dumps({"type": "result", "result": "done"}),
+    ]
+
+
+def test_render_shows_tool_result_output():
+    from dwim.claude_runner import _render_events
+    out = []
+    _render_events(_tool_result_events("t1", "ls", "file-a.txt\nfile-b.txt"), out.append)
+    joined = "\n".join(out)
+    assert "file-a.txt" in joined and "file-b.txt" in joined  # output no longer dropped
+
+
+def test_render_truncates_long_tool_result():
+    from dwim.claude_runner import _render_events
+    out = []
+    big = "\n".join(f"line{i}" for i in range(20))
+    _render_events(_tool_result_events("t1", "cat big", big), out.append)
+    assert "(+14 lines)" in "\n".join(out)          # 20 - 6 shown
+
+
 def test_run_once_redirects_stdin_to_devnull(monkeypatch):
     # claude -p reads stdin; inheriting the terminal's stdin makes it swallow the
     # user's keystrokes and wait ~3s each run. _run_once must pass stdin=DEVNULL.

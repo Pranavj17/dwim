@@ -64,6 +64,35 @@ def _result_status(block: dict) -> str:
     return "denied" if ("permission" in text or "denied" in text) else "failed"
 
 
+_RESULT_MAX_LINES = 6
+_RESULT_MAX_CHARS = 400
+
+
+def _result_body(block):
+    """Extract the text of a tool_result (content is a str or a list of blocks)."""
+    c = block.get("content")
+    if isinstance(c, str):
+        return c
+    if isinstance(c, list):
+        return "".join(b.get("text", "") for b in c
+                       if isinstance(b, dict) and b.get("type") == "text")
+    return ""
+
+
+def _indent_result(text):
+    """Dim, indent, and truncate a tool result for the live stream."""
+    text = text.strip()
+    if len(text) > _RESULT_MAX_CHARS:
+        text = text[:_RESULT_MAX_CHARS]
+    lines = text.splitlines()
+    shown = lines[:_RESULT_MAX_LINES]
+    body = "\n".join(f"{_GRAY}    {ln}{_RESET}" for ln in shown)
+    extra = len(lines) - _RESULT_MAX_LINES
+    if extra > 0:
+        body += f"\n{_GRAY}    … (+{extra} lines){_RESET}"
+    return body
+
+
 def _render_events(lines, emit):
     """Consume stream-json lines; emit display lines. Returns
     (result_text, session_id, got_result). got_result is True iff a `result`
@@ -92,10 +121,17 @@ def _render_events(lines, emit):
                         emit(f"{_GRAY}  › {desc}{_RESET}")
         elif etype == "user":
             for block in ev.get("message", {}).get("content", []):
-                if block.get("type") == "tool_result" and block.get("is_error"):
-                    desc = pending.pop(block.get("tool_use_id"), "")
+                if block.get("type") != "tool_result":
+                    continue
+                desc = pending.pop(block.get("tool_use_id"), "")
+                body = _result_body(block)
+                if block.get("is_error"):
                     if desc:
                         emit(f"{_RED}  ✗ {desc}  ({_result_status(block)}){_RESET}")
+                    if body.strip():
+                        emit(_indent_result(body))
+                elif body.strip():
+                    emit(_indent_result(body))
         elif etype == "result":
             got_result = True
             result_text = ev.get("result", "") or result_text

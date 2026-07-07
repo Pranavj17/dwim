@@ -41,3 +41,24 @@ def test_locate_rejects_shell_metacharacters(tmp_path):
 def test_locate_empty_name_usage(tmp_path):
     r = _run([])
     assert r.returncode == 2
+
+
+def test_locate_rejects_flaglike_root(tmp_path):
+    (tmp_path / "-delete").mkdir()
+    (tmp_path / "-delete" / "victim.txt").write_text("x")
+    r = subprocess.run([LOCATE, "victim", "-delete"],
+                       capture_output=True, text=True, cwd=str(tmp_path))
+    assert r.returncode == 2
+    assert (tmp_path / "-delete" / "victim.txt").exists()   # nothing deleted
+
+
+def test_locate_root_injection_safe_without_fd(tmp_path):
+    # Force the find fallback (no fd on PATH); a flag-like root must still be
+    # refused before GNU find's -delete path can trigger.
+    (tmp_path / "-delete").mkdir()
+    (tmp_path / "-delete" / "victim.txt").write_text("x")
+    env = dict(os.environ, PATH="/usr/bin:/bin")
+    r = subprocess.run([LOCATE, "victim", "-delete"],
+                       capture_output=True, text=True, cwd=str(tmp_path), env=env)
+    assert r.returncode == 2
+    assert (tmp_path / "-delete" / "victim.txt").exists()

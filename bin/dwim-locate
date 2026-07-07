@@ -12,11 +12,14 @@ root="${2:-$HOME/Documents}"
 # so the value can never be parsed as an option by fd/find.
 [[ "$name" == -* ]] && { echo "dwim-locate: name must not start with '-'" >&2; exit 2; }
 [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "dwim-locate: name must be [A-Za-z0-9._-]" >&2; exit 2; }
+# root is a path (may contain '/'), but a leading '-' makes find/fd read it as a
+# flag (GNU `find -delete <root>` deletes files). Refuse flag-like roots.
+[[ "$root" == -* ]] && { echo "dwim-locate: root must not start with '-'" >&2; exit 2; }
 [[ -d "$root" ]] || root="$HOME"
 
 if command -v fd >/dev/null 2>&1; then
   fd --max-depth 5 --hidden --absolute-path \
-     --exclude .git --exclude node_modules "$name" "$root" 2>/dev/null | head -50
+     --exclude .git --exclude node_modules -- "$name" "$root" 2>/dev/null | head -50
 else
   find "$root" -maxdepth 5 -iname "*${name}*" \
        -not -path '*/.git/*' -not -path '*/node_modules/*' 2>/dev/null | head -50

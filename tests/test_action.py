@@ -99,3 +99,28 @@ def test_prompt_reach_guidance_is_in_system_prompt():
     from dwim.action import SYSTEM_PROMPT
     assert "dwim-locate" in SYSTEM_PROMPT
     assert "Glob" in SYSTEM_PROMPT       # explains Glob/Grep are cwd-only
+
+
+def test_system_prompt_has_destructive_enumeration_clause():
+    from dwim.action import SYSTEM_PROMPT
+    p = SYSTEM_PROMPT.lower()
+    # tells the agent to discover read-only itself and offer several ordered options
+    assert "remediation option" in p
+    assert "safest" in p
+    assert "do not return the discovery" in p
+
+
+def test_run_action_forwards_multiple_commands():
+    from dwim.action import run_action
+
+    def fake_runner(prompt, model):
+        return ('{"answer":"17 worktrees, 3 merged","commands":['
+                '{"cmd":"git worktree prune","desc":"clear stale worktrees"},'
+                '{"cmd":"git worktree remove a b c","desc":"remove 3 merged"}]}',
+                "sid-1")
+
+    out = run_action("delete the unrelated worktrees", runner=fake_runner,
+                     context={"cwd": "/x"}, model="haiku")
+    assert [c["cmd"] for c in out["commands"]] == \
+        ["git worktree prune", "git worktree remove a b c"]
+    assert out["session_id"] == "sid-1"

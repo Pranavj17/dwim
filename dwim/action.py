@@ -16,6 +16,13 @@ SYSTEM_PROMPT = (
     "`dwim-locate NAME ~`). For 'why is X big / what's using space', run "
     "`du -ah <dir> | sort -rh | head`. Make your FIRST suggested command the one "
     "that reproduces the finding you report, so running it confirms your answer.\n"
+    "If the intent asks to DELETE, REMOVE, CLEAN, PRUNE, KILL, RESET, DROP or "
+    "otherwise change MANY things at once, do the read-only discovery YOURSELF "
+    "first (list/inspect with your read-only tools) — do NOT return the "
+    "discovery/list command as the option and stop. Then return SEVERAL "
+    "commands, one per distinct remediation option, ordered SAFEST first (e.g. "
+    "clear only stale, then remove a safe subset, then remove everything), each "
+    "`desc` saying what it affects and how many.\n"
     "Never run commands that change the system. Respond with ONLY a JSON "
     "object on the last line:\n"
     '{"answer": "<one short plain-English line — the actual finding if you '

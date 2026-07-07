@@ -26,6 +26,7 @@ _KNOWN_SAFE = {
     "Bash(git diff:*)", "Bash(du:*)", "Bash(df:*)", "Bash(grep:*)",
     "Bash(rg:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(pwd)",
     "Bash(dwim-locate:*)",
+    "Bash(dwim-git:*)",
 }
 
 
@@ -77,6 +78,11 @@ def test_allowlist_has_dwim_locate_not_find_or_fd():
     assert "Bash(dwim-locate:*)" in _ALLOWED
     # find/fd must never be directly allowed — dwim-locate is the safe front door.
     assert not any(a.startswith("Bash(find") or a.startswith("Bash(fd") for a in _ALLOWED)
+
+
+def test_allowlist_has_dwim_git():
+    from dwim.claude_runner import _ALLOWED
+    assert "Bash(dwim-git:*)" in _ALLOWED
 
 
 import json

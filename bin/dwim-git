@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Read-only git for the dwim @ agent. Runs `git -C <path> <sub> …` ONLY for a
+# positive allowlist of read-only subcommands, with per-verb guards on the ones
+# that have mutating forms (branch/worktree). Fail-closed: anything unrecognized
+# runs NOTHING and exits non-zero. Gives the agent cross-repo reach without
+# reopening a write path (mirrors dwim-locate).
+set -euo pipefail
+
+path="${1:-}"
+sub="${2:-}"
+[[ -z "$path" || -z "$sub" ]] && { echo "usage: dwim-git <path> <subcommand> [args]" >&2; exit 2; }
+# path: real directory, not flag-like (a leading '-' would be read as a git option).
+[[ "$path" == -* ]] && { echo "dwim-git: path must not start with '-'" >&2; exit 2; }
+[[ -d "$path" ]] || { echo "dwim-git: not a directory: $path" >&2; exit 2; }
+shift 2   # $@ is now the subcommand's args
+
+case "$sub" in
+  status|log|show|diff|rev-list|rev-parse|merge-base)
+    : ;;                                   # inherently read-only
+  branch)
+    # `git branch <name>` creates; -d/-D/-m/-M/-c/-C/-u mutate. Allow ONLY
+    # listing: known listing flags, and a positional ONLY as the commit arg of
+    # --merged/--no-merged/--contains/--no-contains.
+    expect_commit=""
+    for a in "$@"; do
+      case "$a" in
+        --merged|--no-merged|--contains|--no-contains) expect_commit=1 ;;
+        -a|-r|-l|-v|-vv|--list|--all|--remotes|--color|--column|--no-column) expect_commit="" ;;
+        --merged=*|--no-merged=*|--contains=*|--no-contains=*) expect_commit="" ;;
+        -*) echo "dwim-git: branch flag not allowed: $a" >&2; exit 2 ;;
+        *)  [[ -n "$expect_commit" ]] || { echo "dwim-git: git branch positional not allowed (would create a branch)" >&2; exit 2; }
+            expect_commit="" ;;
+      esac
+    done ;;
+  worktree)
+    [[ "${1:-}" == "list" ]] || { echo "dwim-git: only 'worktree list' is allowed" >&2; exit 2; } ;;
+  *)
+    echo "dwim-git: subcommand not allowed: $sub" >&2; exit 2 ;;
+esac
+
+# Reject write-to-file output flags on any subcommand (log/diff -o/--output).
+for a in "$@"; do
+  case "$a" in
+    -o|--output|--output=*) echo "dwim-git: output-to-file not allowed" >&2; exit 2 ;;
+  esac
+done
+
+# Best-effort read: a downstream `| head` (SIGPIPE) or unreadable object must
+# not abort us before git's own exit is what surfaces.
+set +o pipefail
+git -C "$path" "$sub" "$@"

@@ -17,6 +17,7 @@ _ALLOWED = [
     "Bash(git diff:*)", "Bash(du:*)", "Bash(df:*)", "Bash(grep:*)",
     "Bash(rg:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(pwd)",
     "Bash(dwim-locate:*)",     # read-only by construction: name+root only, no flags
+    "Bash(dwim-git:*)",        # read-only by construction: positive-allowlisted subcommands only
 ]
 
 _GRAY = "\033[38;5;244m"

@@ -101,6 +101,11 @@ def test_prompt_reach_guidance_is_in_system_prompt():
     assert "Glob" in SYSTEM_PROMPT       # explains Glob/Grep are cwd-only
 
 
+def test_prompt_mentions_dwim_git_for_other_repos():
+    from dwim.action import SYSTEM_PROMPT
+    assert "dwim-git" in SYSTEM_PROMPT
+
+
 def test_system_prompt_has_destructive_enumeration_clause():
     from dwim.action import SYSTEM_PROMPT
     p = SYSTEM_PROMPT.lower()

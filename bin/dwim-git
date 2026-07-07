@@ -14,6 +14,18 @@ sub="${2:-}"
 [[ -d "$path" ]] || { echo "dwim-git: not a directory: $path" >&2; exit 2; }
 shift 2   # $@ is now the subcommand's args
 
+# The agent often quotes the whole subcommand as one arg (`dwim-git P "worktree
+# list"` or `"branch --merged main"`). Split a whitespace-bearing subcommand back
+# into verb + args so it flows through the SAME guards below. Safe: the split
+# words are re-validated (a sneaky `"status; rm x"` splits to sub="status;" which
+# the allowlist rejects), and nothing is ever eval'd — words go straight to git's
+# argv.
+if [[ "$sub" == *[[:space:]]* ]]; then
+  read -ra _parts <<< "$sub"
+  sub="${_parts[0]}"
+  set -- "${_parts[@]:1}" "$@"
+fi
+
 case "$sub" in
   status|log|show|diff|rev-list|rev-parse|merge-base)
     : ;;                                   # inherently read-only

@@ -217,3 +217,23 @@ def test_injection_shaped_args_are_literal_not_executed(repo):
     # ran "echo PWNED", so it must never appear in stdout.
     assert "PWNED" not in r.stdout
     assert "PWNED" not in r.stderr
+
+
+# --- quoted-subcommand form (agent passes "worktree list" as ONE arg) --------
+def test_quoted_worktree_list_runs(repo):
+    r = dg(repo, "worktree list")
+    assert r.returncode == 0 and str(repo) in r.stdout
+
+def test_quoted_branch_merged_runs(repo):
+    r = dg(repo, "branch --merged main")
+    assert r.returncode == 0 and "feature" in r.stdout
+
+def test_quoted_status_with_flags_runs(repo):
+    assert dg(repo, "status --short --branch").returncode == 0
+
+def test_quoted_mutations_still_rejected(repo):
+    before_b, before_w = branches(repo), worktrees(repo)
+    for bad in ["worktree remove x", "branch -D feature", "branch sneaky",
+                "status; rm x", "checkout feature", "worktree add ../x"]:
+        assert dg(repo, bad).returncode != 0, f"{bad!r} was NOT rejected"
+    assert branches(repo) == before_b and worktrees(repo) == before_w

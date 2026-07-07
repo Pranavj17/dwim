@@ -17,6 +17,11 @@ root="${2:-$HOME/Documents}"
 [[ "$root" == -* ]] && { echo "dwim-locate: root must not start with '-'" >&2; exit 2; }
 [[ -d "$root" ]] || root="$HOME"
 
+# Best-effort listing: a broad match closes the reader (head) via SIGPIPE, or
+# find hits an unreadable dir — neither is a real failure, so don't let
+# pipefail/-e abort or report nonzero on a result we successfully printed.
+set +o pipefail
+
 if command -v fd >/dev/null 2>&1; then
   fd --max-depth 5 --hidden --absolute-path \
      --exclude .git --exclude node_modules -- "$name" "$root" 2>/dev/null | head -50

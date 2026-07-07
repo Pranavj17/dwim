@@ -62,3 +62,33 @@ def test_locate_root_injection_safe_without_fd(tmp_path):
                        capture_output=True, text=True, cwd=str(tmp_path), env=env)
     assert r.returncode == 2
     assert (tmp_path / "-delete" / "victim.txt").exists()
+
+
+def test_locate_many_matches_exits_zero(tmp_path):
+    # >64KB of match output makes head close early → producer SIGPIPE. A
+    # successful search must still exit 0 (not 1/141) and cap at 50 lines.
+    for i in range(1500):
+        (tmp_path / f"daily{i:04d}").mkdir()
+    r = subprocess.run([LOCATE, "daily", str(tmp_path)],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.returncode
+    assert 0 < len(r.stdout.splitlines()) <= 50
+
+
+def test_locate_permission_denied_exits_zero(tmp_path):
+    # find branch (fd scrubbed) hitting an unreadable subdir is best-effort,
+    # not a failure. Skip if running as root (can read anything).
+    if os.geteuid() == 0:
+        import pytest; pytest.skip("root bypasses permission checks")
+    (tmp_path / "real-daily").mkdir()
+    locked = tmp_path / "locked"; locked.mkdir()
+    (locked / "inner").mkdir()
+    os.chmod(locked, 0o000)
+    try:
+        env = dict(os.environ, PATH="/usr/bin:/bin")   # force find branch
+        r = subprocess.run([LOCATE, "daily", str(tmp_path)],
+                           capture_output=True, text=True, env=env)
+        assert r.returncode == 0, r.returncode
+        assert "real-daily" in r.stdout
+    finally:
+        os.chmod(locked, 0o755)      # restore so pytest can clean up tmp_path

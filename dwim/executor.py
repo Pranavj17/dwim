@@ -16,6 +16,11 @@ INTERACTIVE = frozenset({
 READ_ONLY_VERBS = frozenset({
     "ls", "cat", "du", "df", "grep", "rg", "head", "tail", "pwd", "echo", "git",
     "sort", "uniq", "wc", "cut", "tr", "column", "nl", "rev", "comm", "fold",
+    # dwim-locate is our own read-only-by-construction locate (name+root only, no
+    # -exec/-delete reachable) — a picked locate suggestion should auto-run + panel,
+    # not trip the mutating-confirm. Chained mutations after it are still caught by
+    # the separator scan (e.g. `dwim-locate x; rm y` stays not-read-only).
+    "dwim-locate",
 })
 _READ_ONLY_GIT_SUB = frozenset({"status", "log", "diff"})  # mirror _ALLOWED
 

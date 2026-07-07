@@ -148,3 +148,12 @@ def test_run_captured_truncates_output():
 def test_run_captured_timeout():
     r = run_captured("sleep 5", timeout=1)
     assert r["timed_out"] is True
+
+
+def test_read_only_allows_dwim_locate_but_not_chained():
+    # dwim-locate is read-only by construction → a picked locate suggestion
+    # auto-runs (no false mutating-confirm); chaining a mutation still blocks it.
+    assert is_read_only("dwim-locate ls ~/Documents")
+    assert is_read_only("dwim-locate the-daily-you ~")
+    assert not is_read_only("dwim-locate x; rm -rf y")
+    assert not is_read_only("dwim-locate x && rm y")

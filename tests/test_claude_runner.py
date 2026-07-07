@@ -148,10 +148,29 @@ def test_run_resumes_on_timeout_then_completes(monkeypatch):
 def test_run_gives_up_after_max_resumes(monkeypatch):
     from dwim import claude_runner as cr
     monkeypatch.setattr(cr.shutil, "which", lambda _x: "/usr/bin/claude")
-    monkeypatch.setattr(cr, "_run_once",
-                        lambda cmd, emit, timeout: ("partial", "sess-2", False))
+    calls = {"n": 0}
+
+    def fake_once(cmd, emit, timeout):
+        calls["n"] += 1
+        return ("partial", "sess-2", False)
+    monkeypatch.setattr(cr, "_run_once", fake_once)
     text, sid = cr.run("why", "sonnet")
     assert text == "partial" and sid == "sess-2"
+    assert calls["n"] == 3               # initial + exactly 2 resumes
+
+
+def test_run_keeps_last_session_id_when_resume_returns_empty(monkeypatch):
+    from dwim import claude_runner as cr
+    monkeypatch.setattr(cr.shutil, "which", lambda _x: "/usr/bin/claude")
+    seq = [("", "sess-A", False), ("", "", False), ("final", "sess-A", True)]
+    calls = {"n": 0}
+
+    def fake_once(cmd, emit, timeout):
+        r = seq[calls["n"]]; calls["n"] += 1
+        return r
+    monkeypatch.setattr(cr, "_run_once", fake_once)
+    text, sid = cr.run("why", "sonnet")
+    assert text == "final" and sid == "sess-A" and calls["n"] == 3
 
 
 def test_run_no_resume_on_clean_completion(monkeypatch):

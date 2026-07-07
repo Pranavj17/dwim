@@ -130,10 +130,11 @@ def run(prompt: str, model: str, effort: str = "", resume: str = "",
     while not got and session_id and tries < max_resumes:
         tries += 1
         emit(f"{_GRAY}  ⟳ resuming… ({tries}/{max_resumes}){_RESET}")
-        text2, session_id, got = _run_once(
+        text2, sid2, got = _run_once(
             _build_cmd("Continue and give your final answer.",
                        model, effort, session_id), emit, timeout)
         text = text2 or text
+        session_id = sid2 or session_id
     if not got and tries >= max_resumes:
         emit(f"{_RED}  ⚠ gave up after {max_resumes} resumes{_RESET}")
     return text, session_id

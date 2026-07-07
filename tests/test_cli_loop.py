@@ -94,3 +94,17 @@ def test_run_interactive_not_executed_even_with_force():
     assert obj["interactive"] is True
     assert obj["ran"] is False               # NEVER executed, even with --force
     assert obj["exit"] is None
+
+
+def test_repair_cli_claude_fallback_unpacks_tuple(monkeypatch, capsys):
+    import io, sys
+    from dwim import __main__ as m
+    # history with no "command not found" → repair falls through to the runner
+    monkeypatch.setattr("dwim.claude_runner.run",
+                        lambda p, model, effort="", resume="", **k:
+                            ('{"commands":[{"cmd":"npm ci","desc":"reinstall"}]}', "sid"))
+    monkeypatch.setattr(sys, "stdin",
+                        io.StringIO('[{"cmd":"npm test","exit":1,"stderr":"AssertionError"}]'))
+    rc = m.main(["--repair"])
+    assert rc == 0
+    assert "npm ci" in capsys.readouterr().out    # candidate printed, no crash

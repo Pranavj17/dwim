@@ -27,6 +27,31 @@ def test_cli_no_suggestion_exit_1():
     assert r.stdout.strip() == ""
 
 
+def test_run_emits_lossless_cmd_hl():
+    # The --run JSON must carry a syntax-highlighted `cmd_hl` for the shell to
+    # DISPLAY, and it must strip back byte-for-byte to the raw `cmd`.
+    import json
+    from dwim.highlight import strip_ansi
+    r = _run(["--run", "ls -la"])
+    assert r.returncode == 0
+    out = json.loads(r.stdout)
+    assert "cmd_hl" in out
+    assert out["cmd"] == "ls -la"
+    assert strip_ansi(out["cmd_hl"]) == out["cmd"]
+    assert "\033[" in out["cmd_hl"]   # actually colored
+
+
+def test_run_cmd_hl_present_when_not_run():
+    # A mutating command isn't executed here (ran=false) but still gets cmd_hl.
+    import json
+    from dwim.highlight import strip_ansi
+    r = _run(["--run", "rm -rf /tmp/dwim-nonexistent-xyz"])
+    assert r.returncode == 0
+    out = json.loads(r.stdout)
+    assert out["ran"] is False
+    assert strip_ansi(out["cmd_hl"]) == out["cmd"]
+
+
 def test_refresh_inventory_cli(tmp_path, monkeypatch):
     from dwim import context, __main__ as m
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))

@@ -119,26 +119,31 @@ def main(argv=None) -> int:
         import shutil
         from dwim.executor import (is_interactive, is_read_only, run_captured,
                                    first_binary)
+        from dwim.highlight import highlight
         cmd = args.run
         interactive = is_interactive(cmd)
         read_only = is_read_only(cmd)
+        # Syntax-highlighted form for the shell to DISPLAY at the consent gate
+        # and in the result panel — display-only, never executed (the shell runs
+        # the raw `cmd`). Lossless: strip_ansi(cmd_hl) == cmd.
+        cmd_hl = highlight(cmd)
         # Execute ONLY when safe (read-only) or explicitly approved (mutating +
         # --force). Interactive commands are never run here.
         may_run = (not interactive) and (read_only or args.force)
         if may_run:
-            out = {"cmd": cmd, "interactive": interactive, "read_only": read_only,
-                   "ran": True, **run_captured(cmd)}
+            out = {"cmd": cmd, "cmd_hl": cmd_hl, "interactive": interactive,
+                   "read_only": read_only, "ran": True, **run_captured(cmd)}
         elif interactive and shutil.which(first_binary(cmd)) is None:
             # Interactive tool that isn't installed → report as not-found so the
             # loop repairs it (offer an install) instead of handing off a dud.
             binv = first_binary(cmd)
-            out = {"cmd": cmd, "interactive": True, "read_only": read_only,
-                   "ran": False, "exit": 127, "stdout": "",
+            out = {"cmd": cmd, "cmd_hl": cmd_hl, "interactive": True,
+                   "read_only": read_only, "ran": False, "exit": 127, "stdout": "",
                    "stderr": f"zsh: command not found: {binv}", "timed_out": False}
         else:
-            out = {"cmd": cmd, "interactive": interactive, "read_only": read_only,
-                   "ran": False, "exit": None, "stdout": "", "stderr": "",
-                   "timed_out": False}
+            out = {"cmd": cmd, "cmd_hl": cmd_hl, "interactive": interactive,
+                   "read_only": read_only, "ran": False, "exit": None, "stdout": "",
+                   "stderr": "", "timed_out": False}
         print(json.dumps(out))
         return 0
 

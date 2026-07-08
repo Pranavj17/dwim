@@ -154,3 +154,28 @@ def test_write_flag_refuses_empty(monkeypatch, tmp_path):
     from dwim.__main__ import main
     rc = main(["--write", str(tmp_path / "out.txt")])
     assert rc == 1
+
+
+def test_action_stores_raw_answer_not_rendered(monkeypatch, tmp_path, capsys):
+    # store_answer must receive the RAW markdown (no ANSI), so dwim-write writes
+    # clean content even though the ✦ display is rendered.
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))  # isolate ensure_starters
+    import dwim.__main__ as m
+    # __main__.main() imports run_action locally (`from dwim.action import
+    # run_action`) inside the --action branch, so it must be patched on its
+    # source module (dwim.action) rather than on dwim.__main__ — the latter
+    # has no module-level run_action attribute to patch.
+    monkeypatch.setattr("dwim.action.run_action",
+                        lambda *a, **k: {"answer": "| A | B |\n|---|---|\n| 1 | 2 |",
+                                         "commands": [], "session_id": ""})
+    monkeypatch.setattr("dwim.context.gather", lambda: {})
+    monkeypatch.setattr("dwim.claude_runner.run", lambda *a, **k: ("", ""))
+    m.main(["--action", "make a table"])
+    from dwim.filewrite import last_answer_path
+    with open(last_answer_path()) as f:
+        stored = f.read()
+    assert "\033[" not in stored                 # RAW, no ANSI leaked into storage
+    assert stored == "| A | B |\n|---|---|\n| 1 | 2 |"
+    err = capsys.readouterr().err
+    assert "─" in err                            # the DISPLAY was rendered

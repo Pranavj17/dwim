@@ -10,6 +10,15 @@ import sys
 from dwim.config import load_config
 
 
+def _term_width() -> int:
+    import shutil
+    try:
+        return int(os.environ.get("COLUMNS") or
+                   shutil.get_terminal_size((80, 24)).columns)
+    except (ValueError, OSError):
+        return 80
+
+
 def _print_status() -> int:
     from dwim.client import ping
     cfg = load_config()
@@ -130,7 +139,12 @@ def main(argv=None) -> int:
         from dwim.filewrite import store_answer
         store_answer(result["answer"])   # so a later dwim-write can save it
         if result["answer"]:
-            print(f"{cyan}✦{reset} {result['answer']}", file=sys.stderr)
+            from dwim.render import render
+            shown = render(result["answer"], _term_width())
+            # multi-line render (a table/code block) prints BELOW the ✦ marker so
+            # its column alignment isn't offset by the "✦ " prefix.
+            sep = "\n" if "\n" in shown else " "
+            print(f"{cyan}✦{reset}{sep}{shown}", file=sys.stderr)
         for c in result["commands"]:
             # "<plain-English desc>\t<command>" — fzf shows the desc, previews
             # the command, and loads the command on select.

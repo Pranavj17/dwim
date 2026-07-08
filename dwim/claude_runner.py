@@ -18,6 +18,7 @@ _ALLOWED = [
     "Bash(rg:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(pwd)",
     "Bash(dwim-locate:*)",     # read-only by construction: name+root only, no flags
     "Bash(dwim-git:*)",        # read-only by construction: positive-allowlisted subcommands only
+    "Bash(dwim-rag:*)",        # read-only local RAG search over the user's docs/code
 ]
 
 _GRAY = "\033[38;5;244m"

@@ -265,3 +265,8 @@ def test_write_intent_yields_dwim_write():
     out = run_action("write an express server → ~/Documents/server.js",
                      runner=fake, context={})
     assert out["commands"][0]["cmd"].startswith("dwim-write ")
+
+
+def test_prompt_teaches_dwim_rag():
+    from dwim.action import SYSTEM_PROMPT
+    assert "dwim-rag" in SYSTEM_PROMPT

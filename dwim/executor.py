@@ -147,14 +147,17 @@ def run_captured(cmd: str, *, timeout: int = 30, cap: int = 4000) -> dict:
     `duration` is wall-clock seconds (rounded) so the panel can show how long
     the command took.
 
-    Run under `bash -o pipefail` so a pipeline reports the FIRST failing stage,
-    not just the last. Without it, `ps aux --sort=… | head` reported exit 0 (head
-    succeeded) and the panel showed ✓ even though `ps` errored — a false success.
+    NOTE: deliberately NOT `pipefail`. It looks tempting (a bad `ps --sort | head`
+    would surface ps's failure instead of head's 0), but pipefail turns the most
+    common benign-non-zero pipelines into false failures: `grep pat f | head` with
+    no match (grep exits 1) and large `du -ah | sort -rh | head` (head closes the
+    pipe → du/sort SIGPIPE 141) would both show ✗ and trip the repair loop. The
+    real bad-flag case is handled upstream by the BSD-tools prompt guidance, so we
+    keep the last-stage exit semantics of a normal shell pipeline.
     """
     start = time.perf_counter()
-    argv = ["/bin/bash", "-o", "pipefail", "-c", cmd]
     try:
-        p = subprocess.run(argv, capture_output=True, text=True,
+        p = subprocess.run(cmd, shell=True, capture_output=True, text=True,
                            timeout=timeout)
         return {"exit": p.returncode, "stdout": p.stdout[:cap],
                 "stderr": p.stderr[:cap], "timed_out": False,

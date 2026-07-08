@@ -8,8 +8,14 @@ import tomllib
 DEFAULT_MODEL = "mlx-community/Qwen2.5-Coder-1.5B-Instruct-4bit"
 
 
+def _config_base() -> str:
+    """XDG_CONFIG_HOME (else ~/.config) + /dwim — matches persona.py/registry.py."""
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    return os.path.join(base, "dwim")
+
+
 def load_config(path: str | None = None) -> dict:
-    path = path or os.path.expanduser("~/.config/dwim/config.toml")
+    path = path or os.path.join(_config_base(), "config.toml")
     if not os.path.exists(path):
         return {"model": DEFAULT_MODEL}
     with open(path, "rb") as f:

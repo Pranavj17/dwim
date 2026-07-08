@@ -84,8 +84,12 @@ def main(argv=None) -> int:
         from dwim.action import run_action
         from dwim.context import gather
         from dwim.claude_runner import run as claude_run
-        from dwim.persona import resolve_persona, load_persona
+        from dwim.persona import resolve_persona, load_persona, ensure_starters
         from dwim.registry import resolve_role
+        # Seed the shipped starter personas (git/k8s/sql) on first use so `@git`
+        # works out of the box — resolve_persona is side-effect-free, so without
+        # this a fresh install matches nothing until `dwim personas` is run once.
+        ensure_starters()
         # A persona is selected by an EXACT word-1 match on the intent; otherwise
         # the whole line is the intent. Prompt-only: no tier/model change here.
         name, intent = resolve_persona(args.action)
@@ -130,7 +134,10 @@ def main(argv=None) -> int:
                 _sf.write(sid)
         except OSError:
             pass
-        return 0 if result["commands"] else 1
+        # Success if we produced anything useful — commands OR an answer. An
+        # answer-only result (a text/explain task) is a valid deliverable, not a
+        # failure, so it must not exit non-zero (that reddens $? and breaks `&&`).
+        return 0 if (result["commands"] or result["answer"]) else 1
 
     if args.run is not None:
         import json

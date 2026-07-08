@@ -166,12 +166,13 @@ def test_run_captured_reports_duration():
     assert isinstance(r["duration"], (int, float)) and r["duration"] >= 0
 
 
-def test_run_captured_pipefail_surfaces_upstream_failure():
+def test_run_captured_uses_last_stage_exit_no_pipefail():
     from dwim.executor import run_captured
-    # A pipeline whose FIRST stage fails must report nonzero, not head's 0 —
-    # otherwise the panel shows ✓ for a command that actually errored.
-    r = run_captured("ls /nonexistent-xyz-12345 | head -1")
-    assert r["exit"] != 0
+    # We deliberately do NOT use pipefail: a benign non-zero upstream stage must
+    # NOT be reported as a failure. `grep no-match | head` (grep exits 1 on no
+    # match) is a normal, successful command — the pipeline's exit is head's 0.
+    r = run_captured("grep zzz-no-such-line /etc/hosts | head -1")
+    assert r["exit"] == 0
     # clean pipeline still succeeds
     ok = run_captured("echo hi | head -1")
     assert ok["exit"] == 0 and "hi" in ok["stdout"]

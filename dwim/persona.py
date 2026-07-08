@@ -58,8 +58,8 @@ _STARTERS = {
 
 
 def _config_dir() -> str:
-    """Same config-dir resolution as config.py: honor XDG_CONFIG_HOME, else
-    ~/.config, then the `dwim` subdir. Never hardcode ~/.config outright."""
+    """dwim's config dir, honoring XDG_CONFIG_HOME (else ~/.config). config.py and
+    registry.py resolve the same way, so personas live beside config.toml."""
     base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
     return os.path.join(base, "dwim")
 

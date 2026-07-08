@@ -50,6 +50,8 @@ def main(argv=None) -> int:
                         help="with --run: permit executing a mutating command (user approved)")
     parser.add_argument("--repair", action="store_true",
                         help="read a JSON history array on stdin; print repair candidates")
+    parser.add_argument("--write", metavar="PATH",
+                        help="write the last @ answer (cache) to PATH; exit 1 if none")
     args = parser.parse_args(argv)
 
     if args.status:
@@ -79,6 +81,12 @@ def main(argv=None) -> int:
         print(f"\npersonas dir: {personas_dir()}  "
               "(use as `@<name> intent`, e.g. `@git undo my last commit`)")
         return 0
+
+    if args.write:
+        from dwim.filewrite import write_last_answer
+        ok, msg = write_last_answer(args.write)
+        print(msg, file=sys.stderr)
+        return 0 if ok else 1
 
     if args.action is not None:
         from dwim.action import run_action
@@ -119,6 +127,8 @@ def main(argv=None) -> int:
                             runner=lambda p, md: claude_run(p, md, effort, resume=resume),
                             context=gather(), model=model,
                             persona_text=ptext, persona_name=name or "")
+        from dwim.filewrite import store_answer
+        store_answer(result["answer"])   # so a later dwim-write can save it
         if result["answer"]:
             print(f"{cyan}✦{reset} {result['answer']}", file=sys.stderr)
         for c in result["commands"]:

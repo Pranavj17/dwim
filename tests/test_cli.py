@@ -136,3 +136,21 @@ def test_action_stamps_last_model(tmp_path, monkeypatch):
     assert (tmp_path / "dwim" / "last_model").read_text() == "sonnet"
     m.main(["--action", "how do I zip"])           # default = fast
     assert (tmp_path / "dwim" / "last_model").read_text() == "haiku"
+
+
+def test_write_flag_writes_last_answer(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    from dwim import filewrite
+    filewrite.store_answer("hello\nworld\n")
+    from dwim.__main__ import main
+    out = tmp_path / "out.txt"
+    rc = main(["--write", str(out)])
+    assert rc == 0
+    assert out.read_text() == "hello\nworld\n"
+
+
+def test_write_flag_refuses_empty(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache2"))
+    from dwim.__main__ import main
+    rc = main(["--write", str(tmp_path / "out.txt")])
+    assert rc == 1

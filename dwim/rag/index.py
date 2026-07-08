@@ -32,7 +32,10 @@ def _iter_files(roots, excludes, exts, max_kb):
                 yield p
 
 
-def build(roots, excludes, exts, max_kb, model):
+def build(roots, excludes, exts, max_kb, model, progress=None):
+    """Build/update the index. `progress(done, total, added, chunks)` is called
+    per file so a long run (indexing ~/Documents can be tens of thousands of
+    files) shows live feedback instead of grinding silently."""
     vectors, chunks, manifest = store.load_index()
     prev_files = (manifest or {}).get("files", {})
     old_by_file = {}
@@ -42,7 +45,9 @@ def build(roots, excludes, exts, max_kb, model):
 
     new_chunks, new_rows, new_files = [], [], {}
     added = skipped = 0
-    for p in _iter_files(roots, excludes, exts, max_kb):
+    files = list(_iter_files(roots, excludes, exts, max_kb))
+    total = len(files)
+    for i, p in enumerate(files):
         try:
             with open(p, encoding="utf-8", errors="replace") as f:
                 text = f.read()
@@ -68,6 +73,8 @@ def build(roots, excludes, exts, max_kb, model):
                     new_rows.append(v)
             added += 1
         new_files[p] = {"mtime": os.path.getmtime(p), "hash": h}
+        if progress:
+            progress(i + 1, total, added, len(new_chunks))
 
     dim = 384
     if old_by_file:

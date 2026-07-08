@@ -24,9 +24,14 @@ def load_config(path: str | None = None) -> dict:
 
 
 _RAG_DEFAULTS = {
-    "roots": ["~/Documents"],
-    "exclude": [".git", "node_modules", ".venv", "dist", "build", "_build",
-                "deps", "target"],
+    # No implicit corpus: `dwim index` with no path indexes nothing (indexing all
+    # of ~/Documents is 30k+ files). Pass a dir, or set [rag] roots in config.toml.
+    "roots": [],
+    "exclude": [".git", "node_modules", ".venv", "venv", "env", "dist", "build",
+                "_build", "deps", "target", "vendor", "Pods", "__pycache__",
+                "site-packages", ".mypy_cache", ".pytest_cache", ".tox", ".next",
+                ".cache", ".worktrees", ".idea", ".dart_tool", ".gradle",
+                ".terraform", "DerivedData", "Carthage", "elm-stuff"],
     "extensions": [".md", ".txt", ".py", ".ex", ".exs", ".js", ".ts", ".rb",
                    ".go", ".rs", ".json", ".toml", ".yaml", ".yml", ".sh", ".zsh"],
     "max_file_kb": 1024,

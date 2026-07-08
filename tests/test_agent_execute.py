@@ -1,6 +1,9 @@
 import json
+import os
+import subprocess
 from dwim.agent.plan import parse_plan
-from dwim.agent.execute import write_approved_plan, snapshot, execute
+from dwim.agent import execute as execmod
+from dwim.agent.execute import write_approved_plan, snapshot, execute, _default_runner
 
 PLAN = parse_plan('{"steps":[{"kind":"edit","path":"a.py","diff":"+x","why":"g"},{"kind":"run","command":"pytest -q","why":"v"}]}')
 
@@ -31,6 +34,8 @@ def test_execute_calls_runner_and_reports(tmp_path):
     def fake_runner(prompt, plan_file, repo_root, cfg):
         calls["plan_file"] = plan_file
         calls["prompt"] = prompt
+        # read the plan during the run — execute() unlinks it after the runner returns
+        calls["plan_data"] = json.loads(open(plan_file).read())
         return ("done: 1 file changed, tests green", "sess9")
     def fake_snap(root, **kw):
         return "cafe"
@@ -40,8 +45,36 @@ def test_execute_calls_runner_and_reports(tmp_path):
     assert out["snapshot"] == "cafe" and out["session"] == "sess9"
     assert "green" in out["report"]
     # the plan file the hook reads was written and passed to the runner
-    assert json.loads(open(calls["plan_file"]).read())["files"] == ["a.py"]
+    assert calls["plan_data"]["files"] == ["a.py"]
     # the runner prompt carries the original task + a planned command
     captured_prompt = calls["prompt"]
     assert "make the failing test pass" in captured_prompt
     assert "pytest" in captured_prompt
+
+
+def test_default_runner_timeout_returns_report_not_raises(tmp_path, monkeypatch):
+    plan_file = tmp_path / "plan.json"
+    write_approved_plan(PLAN, str(plan_file))
+
+    def raising_run(*a, **kw):
+        raise subprocess.TimeoutExpired(cmd="claude", timeout=1, output="")
+
+    monkeypatch.setattr(execmod.subprocess, "run", raising_run)
+    cfg = {"model": "claude-sonnet-5", "max_iterations": 12, "timeout": 1}
+    text, session = _default_runner("p", str(plan_file), str(tmp_path), cfg)
+    assert "timed out" in text
+    assert not session
+
+
+def test_execute_unlinks_plan_file_after_run(tmp_path):
+    seen = {}
+    def fake_runner(prompt, plan_file, repo_root, cfg):
+        seen["plan_file"] = plan_file
+        # the hook needs it during the run
+        assert os.path.exists(plan_file)
+        return ("done", "sess1")
+    def fake_snap(root, **kw):
+        return "cafe"
+    execute(PLAN, str(tmp_path), {"model": "m", "max_iterations": 1, "timeout": 1},
+            task="t", runner=fake_runner, snapshotter=fake_snap)
+    assert not os.path.exists(seen["plan_file"])

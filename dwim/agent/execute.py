@@ -74,11 +74,27 @@ def _default_runner(prompt, plan_file, repo_root, cfg):
         "--settings", sf.name,
         "--output-format", "stream-json", "--verbose",
     ]
-    proc = subprocess.run(cmd, cwd=repo_root, env=env, text=True,
-                          capture_output=True, timeout=cfg["timeout"])
-    from dwim.claude_runner import parse_stream_result
-    text, session = parse_stream_result(proc.stdout)
-    return text, session
+    try:
+        try:
+            proc = subprocess.run(cmd, cwd=repo_root, env=env, text=True,
+                                  capture_output=True, timeout=cfg["timeout"])
+            out = proc.stdout
+        except subprocess.TimeoutExpired as e:
+            out = e.stdout if isinstance(e.stdout, str) else (
+                  e.stdout.decode() if e.stdout else "")
+            from dwim.claude_runner import parse_stream_result
+            text, session = parse_stream_result(out)
+            return (text or "· execute phase timed out — partial changes may be on "
+                    "disk; use the rollback hash.", session)
+        from dwim.claude_runner import parse_stream_result
+        text, session = parse_stream_result(out)
+        return text, session
+    finally:
+        for f in (sf.name, mf.name):
+            try:
+                os.unlink(f)
+            except OSError:
+                pass
 
 
 def execute(plan, repo_root, cfg, task="", runner=_default_runner, snapshotter=snapshot):
@@ -89,5 +105,13 @@ def execute(plan, repo_root, cfg, task="", runner=_default_runner, snapshotter=s
     prompt = (f"{_EXEC_SYSTEM}\n\nTASK: {task}\n\nAPPROVED PLAN "
               f"(you may edit only these files and run only these commands):\n"
               f"{_plan_text(plan)}")
-    report, session = runner(prompt, plan_file, repo_root, cfg)
+    try:
+        report, session = runner(prompt, plan_file, repo_root, cfg)
+    finally:
+        # The hook needs the plan file during the run, so remove it only after
+        # the runner returns.
+        try:
+            os.unlink(plan_file)
+        except OSError:
+            pass
     return {"snapshot": snap, "session": session, "report": report}

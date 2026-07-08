@@ -14,12 +14,16 @@ _RO_BASH = re.compile(
 
 # Hard denylist: denied unconditionally, even if present in the approved plan.
 _DENY_CMD = re.compile(
-    r"(^|\s|&&|\|\||;)\s*("
-    r"git\s+push|"
-    r"git\s+reset\s+--hard|"
-    r"rm\s+-[rf]|"
+    r"(^|\s|&&|\|\||;|\|)\s*("
+    r"git(\s+-[cC]\s+\S+)*\s+push|"
+    r"git(\s+-[cC]\s+\S+)*\s+reset\s+--hard|"
+    r"rm\s+(-\w*[rRf]\w*|--recursive|--force)|"
     r"git\s+.*--force|git\s+.*\s-f(\s|$)"
     r")")
+
+# Chaining / redirection / command-substitution: if present, the command is NOT
+# a simple read-only command — it must match the approved plan exactly or be denied.
+_SHELL_META = re.compile(r"[>|;&<]|\$\(|`")
 _CRED = ["*.pem", "*.key", ".env", ".env.*", "id_*", "*credential*", "*secret*"]
 
 
@@ -49,7 +53,7 @@ def decide(tool, inp, approved_files, approved_cmds, repo_root):
         cmd = inp.get("command", "") or ""
         if _DENY_CMD.search(cmd):
             return "deny", "hard-denied command (never auto-run)"
-        if _RO_BASH.match(cmd):
+        if _RO_BASH.match(cmd) and not _SHELL_META.search(cmd):
             return "allow", "read-only command"
         if cmd.strip() in [c.strip() for c in approved_cmds]:
             return "allow", "command in approved plan"

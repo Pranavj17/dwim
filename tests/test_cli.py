@@ -68,7 +68,7 @@ def test_action_tier_deep_uses_deep_model(monkeypatch):
     from dwim import __main__ as m
     seen = {}
 
-    def fake_run_action(intent, *, runner, context, model="haiku"):
+    def fake_run_action(intent, *, runner, context, model="haiku", **kw):
         seen["model"] = model
         return {"answer": "", "commands": []}
 
@@ -83,7 +83,7 @@ def test_action_default_tier_uses_fast_model(monkeypatch):
     from dwim import __main__ as m
     seen = {}
 
-    def fake_run_action(intent, *, runner, context, model="haiku"):
+    def fake_run_action(intent, *, runner, context, model="haiku", **kw):
         seen["model"] = model
         return {"answer": "", "commands": []}
 
@@ -129,7 +129,7 @@ def test_action_stamps_last_model(tmp_path, monkeypatch):
     from dwim import __main__ as m
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     monkeypatch.setattr("dwim.action.run_action",
-                        lambda intent, *, runner, context, model="haiku": {"answer": "", "commands": []})
+                        lambda intent, *, runner, context, model="haiku", **kw: {"answer": "", "commands": []})
     monkeypatch.setattr("dwim.context.gather", lambda: {"cwd": "/c"})
     monkeypatch.setattr("dwim.claude_runner.run", lambda *a, **k: "")
     m.main(["--action", "why is x big", "--tier", "deep"])

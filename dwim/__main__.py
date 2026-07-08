@@ -40,6 +40,8 @@ def main(argv=None) -> int:
                         help="list configured models + role + status")
     parser.add_argument("--action", metavar="INTENT",
                         help="run the Claude agent palette for INTENT")
+    parser.add_argument("--personas", action="store_true",
+                        help="list configured @ personas + their dir, then exit")
     parser.add_argument("--tier", choices=["fast", "deep"], default="fast",
                         help="with --action: 'deep' uses the action_deep model (e.g. sonnet)")
     parser.add_argument("--run", metavar="CMD",
@@ -70,11 +72,26 @@ def main(argv=None) -> int:
               "  role = \"action\"\n  effort = \"low\"   # low|medium|high")
         return 0
 
+    if args.personas:
+        from dwim.persona import list_personas, personas_dir
+        for name in list_personas():
+            print(name)
+        print(f"\npersonas dir: {personas_dir()}  "
+              "(use as `@<name> intent`, e.g. `@git undo my last commit`)")
+        return 0
+
     if args.action is not None:
         from dwim.action import run_action
         from dwim.context import gather
         from dwim.claude_runner import run as claude_run
+        from dwim.persona import resolve_persona, load_persona
         from dwim.registry import resolve_role
+        # A persona is selected by an EXACT word-1 match on the intent; otherwise
+        # the whole line is the intent. Prompt-only: no tier/model change here.
+        name, intent = resolve_persona(args.action)
+        ptext = load_persona(name) if name else ""
+        if name:
+            os.environ["DWIM_PERSONA"] = name   # so the spinner can label it
         role = "action_deep" if args.tier == "deep" else "action"
         m = resolve_role(role) or resolve_role("action")
         model = m["model"] if m else ("sonnet" if args.tier == "deep" else "haiku")
@@ -94,9 +111,10 @@ def main(argv=None) -> int:
         # collapses to a one-line breadcrumb; then we print the answer and the
         # command candidates. No separate "thinking…" line — the spinner is it.
         resume = os.environ.get("DWIM_RESUME", "")
-        result = run_action(args.action,
+        result = run_action(intent,
                             runner=lambda p, md: claude_run(p, md, effort, resume=resume),
-                            context=gather(), model=model)
+                            context=gather(), model=model,
+                            persona_text=ptext, persona_name=name or "")
         if result["answer"]:
             print(f"{cyan}✦{reset} {result['answer']}", file=sys.stderr)
         for c in result["commands"]:

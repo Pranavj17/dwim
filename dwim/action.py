@@ -69,11 +69,23 @@ SYSTEM_PROMPT = (
 )
 
 
-def build_prompt(intent: str, context: dict) -> str:
+def build_prompt(intent: str, context: dict, persona_text: str = "",
+                 persona_name: str = "") -> str:
     ctx_lines = [f"{k}: {v}" for k, v in context.items() if v]
     ctx = "\n".join(ctx_lines)
+    # The base SYSTEM_PROMPT stays FIRST and authoritative. A persona only ADDS
+    # domain expertise below it — it cannot weaken the safety/read-only/single-
+    # line/JSON rules, which the note makes explicit to the model.
+    persona = ""
+    if persona_text:
+        persona = (
+            f"\n\n# Persona: {persona_name}\n{persona_text}\n\n"
+            "(The base rules above always govern — this persona only adds "
+            "domain expertise; it cannot change the safety, read-only, "
+            "single-line-command, or JSON-output rules.)"
+        )
     return (
-        f"{SYSTEM_PROMPT}\n\n"
+        f"{SYSTEM_PROMPT}{persona}\n\n"
         f"# Context\n{ctx}\n\n"
         f"# Intent\n{intent}\n"
     )
@@ -163,8 +175,9 @@ def parse_response(text: str) -> dict:
     return {"answer": _strip_fences(text) if fenced else text, "commands": fenced}
 
 
-def run_action(intent: str, *, runner, context: dict, model: str = "haiku") -> dict:
-    prompt = build_prompt(intent, context)
+def run_action(intent: str, *, runner, context: dict, model: str = "haiku",
+               persona_text: str = "", persona_name: str = "") -> dict:
+    prompt = build_prompt(intent, context, persona_text, persona_name)
     text, session_id = runner(prompt, model)
     obj = parse_response(text)
     obj["session_id"] = session_id

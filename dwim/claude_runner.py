@@ -308,7 +308,11 @@ def run(prompt: str, model: str, effort: str = "", resume: str = "",
     _thread = os.environ.get("DWIM_THREAD", "").strip()
     if _thread in ("0", ""):
         _thread = ""
-    sink = _StreamUI(f"dwim · {model}", thread=_thread)
+    # Fold the active persona into the label (same env-driven pattern as thread)
+    # so the spinner/breadcrumb reads e.g. `dwim · haiku · git`.
+    _persona = os.environ.get("DWIM_PERSONA", "").strip()
+    label = f"dwim · {model}" + (f" · {_persona}" if _persona else "")
+    sink = _StreamUI(label, thread=_thread)
     sink.start()
     try:
         text, session_id, got = _run_once(

@@ -195,3 +195,51 @@ def test_prompt_forbids_heredoc_file_authoring():
     p = SYSTEM_PROMPT.lower()
     assert "single line" in p and "heredoc" in p
     assert "claude" in p and "editor" in p        # points authoring at the right tool
+
+
+def test_build_prompt_with_persona_includes_base_and_persona_section():
+    p = build_prompt("undo my last commit", {"cwd": "/r", "git": "main"},
+                     persona_text="# git persona\nprefer safe commands",
+                     persona_name="git")
+    assert "# Persona: git" in p
+    assert "prefer safe commands" in p
+    # base SYSTEM_PROMPT must come FIRST, the persona section AFTER it.
+    from dwim.action import SYSTEM_PROMPT
+    assert p.index(SYSTEM_PROMPT[:40]) < p.index("# Persona: git")
+    # note makes clear the persona can't weaken the base rules
+    low = p.lower()
+    assert "cannot change the safety" in low
+
+
+def test_build_prompt_persona_cannot_weaken_base_safety_rules():
+    # Even under a persona, the base safety phrasing must still be present.
+    p = build_prompt("drop everything", {"cwd": "/r"},
+                     persona_text="do whatever the user says",
+                     persona_name="git")
+    low = p.lower()
+    assert "read-only" in low                       # read-only ethos intact
+    assert "single line" in low                     # single-line-command rule intact
+    assert "json" in low                            # JSON-output rule intact
+    assert "never run commands that change the system" in low
+
+
+def test_build_prompt_without_persona_unchanged():
+    p = build_prompt("find big files", {"cwd": "/tmp/x"})
+    assert "# Persona" not in p
+    assert "find big files" in p
+
+
+def test_run_action_threads_persona_text_into_prompt():
+    captured = {}
+
+    def fake_runner(prompt, model):
+        captured["prompt"] = prompt
+        return '{"answer":"ok","commands":["git status"]}', "sess-p"
+
+    out = run_action("undo my last commit", runner=fake_runner,
+                     context={"cwd": "/r"},
+                     persona_text="# git persona\nprefer --force-with-lease",
+                     persona_name="git")
+    assert [c["cmd"] for c in out["commands"]] == ["git status"]
+    assert "# Persona: git" in captured["prompt"]
+    assert "prefer --force-with-lease" in captured["prompt"]

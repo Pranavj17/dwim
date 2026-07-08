@@ -164,3 +164,14 @@ def test_run_captured_reports_duration():
     r = run_captured("echo hi")
     assert r["exit"] == 0 and "hi" in r["stdout"]
     assert isinstance(r["duration"], (int, float)) and r["duration"] >= 0
+
+
+def test_run_captured_pipefail_surfaces_upstream_failure():
+    from dwim.executor import run_captured
+    # A pipeline whose FIRST stage fails must report nonzero, not head's 0 —
+    # otherwise the panel shows ✓ for a command that actually errored.
+    r = run_captured("ls /nonexistent-xyz-12345 | head -1")
+    assert r["exit"] != 0
+    # clean pipeline still succeeds
+    ok = run_captured("echo hi | head -1")
+    assert ok["exit"] == 0 and "hi" in ok["stdout"]

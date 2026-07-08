@@ -171,3 +171,10 @@ def test_prompt_created_uses_absolute_bsd_find_not_mtime():
     # no -Btime) and away from -mtime (which is 'modified', the wrong question).
     assert "/usr/bin/find" in p and "-Btime" in p
     assert "birth" in p.lower()
+
+
+def test_prompt_macos_bsd_tools_nudge():
+    from dwim.action import SYSTEM_PROMPT
+    p = SYSTEM_PROMPT
+    assert "BSD" in p and "--sort" in p        # steer away from Linux ps --sort
+    assert "ps aux -r" in p                     # the macOS way to sort by CPU

@@ -145,10 +145,16 @@ def is_read_only(cmd: str) -> bool:
 def run_captured(cmd: str, *, timeout: int = 30, cap: int = 4000) -> dict:
     """Run a non-interactive command, capturing output. Never raises.
     `duration` is wall-clock seconds (rounded) so the panel can show how long
-    the command took."""
+    the command took.
+
+    Run under `bash -o pipefail` so a pipeline reports the FIRST failing stage,
+    not just the last. Without it, `ps aux --sort=… | head` reported exit 0 (head
+    succeeded) and the panel showed ✓ even though `ps` errored — a false success.
+    """
     start = time.perf_counter()
+    argv = ["/bin/bash", "-o", "pipefail", "-c", cmd]
     try:
-        p = subprocess.run(cmd, shell=True, capture_output=True, text=True,
+        p = subprocess.run(argv, capture_output=True, text=True,
                            timeout=timeout)
         return {"exit": p.returncode, "stdout": p.stdout[:cap],
                 "stderr": p.stderr[:cap], "timed_out": False,

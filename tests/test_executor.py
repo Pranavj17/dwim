@@ -157,3 +157,10 @@ def test_read_only_allows_dwim_locate_but_not_chained():
     assert is_read_only("dwim-locate the-daily-you ~")
     assert not is_read_only("dwim-locate x; rm -rf y")
     assert not is_read_only("dwim-locate x && rm y")
+
+
+def test_run_captured_reports_duration():
+    from dwim.executor import run_captured
+    r = run_captured("echo hi")
+    assert r["exit"] == 0 and "hi" in r["stdout"]
+    assert isinstance(r["duration"], (int, float)) and r["duration"] >= 0

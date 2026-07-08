@@ -3,6 +3,7 @@
 import re
 import shlex
 import subprocess
+import time
 
 # Full-screen/interactive tools — never captured or auto-run; handed to the shell.
 INTERACTIVE = frozenset({
@@ -142,12 +143,25 @@ def is_read_only(cmd: str) -> bool:
 
 
 def run_captured(cmd: str, *, timeout: int = 30, cap: int = 4000) -> dict:
-    """Run a non-interactive command, capturing output. Never raises."""
+    """Run a non-interactive command, capturing output. Never raises.
+    `duration` is wall-clock seconds (rounded) so the panel can show how long
+    the command took.
+
+    NOTE: deliberately NOT `pipefail`. It looks tempting (a bad `ps --sort | head`
+    would surface ps's failure instead of head's 0), but pipefail turns the most
+    common benign-non-zero pipelines into false failures: `grep pat f | head` with
+    no match (grep exits 1) and large `du -ah | sort -rh | head` (head closes the
+    pipe → du/sort SIGPIPE 141) would both show ✗ and trip the repair loop. The
+    real bad-flag case is handled upstream by the BSD-tools prompt guidance, so we
+    keep the last-stage exit semantics of a normal shell pipeline.
+    """
+    start = time.perf_counter()
     try:
         p = subprocess.run(cmd, shell=True, capture_output=True, text=True,
                            timeout=timeout)
         return {"exit": p.returncode, "stdout": p.stdout[:cap],
-                "stderr": p.stderr[:cap], "timed_out": False}
+                "stderr": p.stderr[:cap], "timed_out": False,
+                "duration": round(time.perf_counter() - start, 2)}
     except subprocess.TimeoutExpired as e:
         out = (e.stdout or "")
         err = (e.stderr or "")
@@ -156,4 +170,5 @@ def run_captured(cmd: str, *, timeout: int = 30, cap: int = 4000) -> dict:
         if isinstance(err, bytes):
             err = err.decode("utf-8", "replace")
         return {"exit": 124, "stdout": out[:cap], "stderr": err[:cap],
-                "timed_out": True}
+                "timed_out": True,
+                "duration": round(time.perf_counter() - start, 2)}

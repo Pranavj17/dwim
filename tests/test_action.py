@@ -162,3 +162,106 @@ def test_prompt_nudges_loop_for_one_at_a_time_commands():
     from dwim.action import SYSTEM_PROMPT
     p = SYSTEM_PROMPT.lower()
     assert "one target at a time" in p and "worktree remove" in p and "for w in" in p
+
+
+def test_prompt_created_uses_absolute_bsd_find_not_mtime():
+    from dwim.action import SYSTEM_PROMPT
+    p = SYSTEM_PROMPT
+    # 'created' must steer to the absolute system BSD find (PATH find is GNU/bfs,
+    # no -Btime) and away from -mtime (which is 'modified', the wrong question).
+    assert "/usr/bin/find" in p and "-Btime" in p
+    assert "birth" in p.lower()
+
+
+def test_prompt_macos_bsd_tools_nudge():
+    from dwim.action import SYSTEM_PROMPT
+    p = SYSTEM_PROMPT
+    assert "BSD" in p and "--sort" in p        # steer away from Linux ps --sort
+    assert "ps aux -r" in p                     # the macOS way to sort by CPU
+
+
+def test_parse_drops_multiline_heredoc_command():
+    # A heredoc can't survive the single-line desc\tcmd channel — it must be
+    # dropped, not offered as a truncated `cat > f << EOF` that writes an empty file.
+    raw = ('{"answer":"use your editor","commands":['
+           '{"cmd":"cat > f.js << \'EOF\'\\nconst x=1\\nEOF","desc":"write file"}]}')
+    out = parse_response(raw)
+    assert out["commands"] == []
+    assert "editor" in out["answer"]
+
+
+def test_prompt_forbids_heredoc_file_authoring():
+    from dwim.action import SYSTEM_PROMPT
+    p = SYSTEM_PROMPT.lower()
+    assert "single line" in p and "heredoc" in p
+    assert "dwim-write" in p                      # points authoring at the write helper
+
+
+def test_build_prompt_with_persona_includes_base_and_persona_section():
+    p = build_prompt("undo my last commit", {"cwd": "/r", "git": "main"},
+                     persona_text="# git persona\nprefer safe commands",
+                     persona_name="git")
+    assert "# Persona: git" in p
+    assert "prefer safe commands" in p
+    # base SYSTEM_PROMPT must come FIRST, the persona section AFTER it.
+    from dwim.action import SYSTEM_PROMPT
+    assert p.index(SYSTEM_PROMPT[:40]) < p.index("# Persona: git")
+    # note makes clear the persona can't weaken the base rules
+    low = p.lower()
+    assert "cannot change the safety" in low
+
+
+def test_build_prompt_persona_cannot_weaken_base_safety_rules():
+    # Even under a persona, the base safety phrasing must still be present.
+    p = build_prompt("drop everything", {"cwd": "/r"},
+                     persona_text="do whatever the user says",
+                     persona_name="git")
+    low = p.lower()
+    assert "read-only" in low                       # read-only ethos intact
+    assert "single line" in low                     # single-line-command rule intact
+    assert "json" in low                            # JSON-output rule intact
+    assert "never run commands that change the system" in low
+
+
+def test_build_prompt_without_persona_unchanged():
+    p = build_prompt("find big files", {"cwd": "/tmp/x"})
+    assert "# Persona" not in p
+    assert "find big files" in p
+
+
+def test_run_action_threads_persona_text_into_prompt():
+    captured = {}
+
+    def fake_runner(prompt, model):
+        captured["prompt"] = prompt
+        return '{"answer":"ok","commands":["git status"]}', "sess-p"
+
+    out = run_action("undo my last commit", runner=fake_runner,
+                     context={"cwd": "/r"},
+                     persona_text="# git persona\nprefer --force-with-lease",
+                     persona_name="git")
+    assert [c["cmd"] for c in out["commands"]] == ["git status"]
+    assert "# Persona: git" in captured["prompt"]
+    assert "prefer --force-with-lease" in captured["prompt"]
+
+
+def test_prompt_handles_self_contained_and_forbids_clarifying_questions():
+    from dwim.action import SYSTEM_PROMPT
+    p = SYSTEM_PROMPT.lower()
+    assert "self-contained" in p              # pasted-content/transform tasks answered directly
+    assert "no tools" in p and "already pasted" in p   # don't grep the FS for pasted content
+    assert "never ask the user" in p          # no clarifying-question dead-ends
+    assert "may be multi-line" in p           # answer can be the deliverable
+
+
+def test_write_intent_yields_dwim_write():
+    from dwim.action import run_action
+    # A fake runner that returns what a compliant model would for a write intent.
+    def fake(prompt, model):
+        assert "dwim-write" in prompt   # prompt must teach the command
+        return ('{"answer": "const express = require(\'express\')\\napp.listen(3000)",'
+                ' "commands": [{"cmd": "dwim-write ~/Documents/server.js",'
+                ' "desc": "write the server file"}]}', "sid")
+    out = run_action("write an express server → ~/Documents/server.js",
+                     runner=fake, context={})
+    assert out["commands"][0]["cmd"].startswith("dwim-write ")

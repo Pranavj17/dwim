@@ -10,6 +10,15 @@ import sys
 from dwim.config import load_config
 
 
+def _term_width() -> int:
+    import shutil
+    try:
+        return int(os.environ.get("COLUMNS") or
+                   shutil.get_terminal_size((80, 24)).columns)
+    except (ValueError, OSError):
+        return 80
+
+
 def _print_status() -> int:
     from dwim.client import ping
     cfg = load_config()
@@ -40,6 +49,8 @@ def main(argv=None) -> int:
                         help="list configured models + role + status")
     parser.add_argument("--action", metavar="INTENT",
                         help="run the Claude agent palette for INTENT")
+    parser.add_argument("--personas", action="store_true",
+                        help="list configured @ personas + their dir, then exit")
     parser.add_argument("--tier", choices=["fast", "deep"], default="fast",
                         help="with --action: 'deep' uses the action_deep model (e.g. sonnet)")
     parser.add_argument("--run", metavar="CMD",
@@ -48,6 +59,8 @@ def main(argv=None) -> int:
                         help="with --run: permit executing a mutating command (user approved)")
     parser.add_argument("--repair", action="store_true",
                         help="read a JSON history array on stdin; print repair candidates")
+    parser.add_argument("--write", metavar="PATH",
+                        help="write the last @ answer (cache) to PATH; exit 1 if none")
     args = parser.parse_args(argv)
 
     if args.status:
@@ -70,11 +83,36 @@ def main(argv=None) -> int:
               "  role = \"action\"\n  effort = \"low\"   # low|medium|high")
         return 0
 
+    if args.personas:
+        from dwim.persona import list_personas, personas_dir
+        for name in list_personas():
+            print(name)
+        print(f"\npersonas dir: {personas_dir()}  "
+              "(use as `@<name> intent`, e.g. `@git undo my last commit`)")
+        return 0
+
+    if args.write:
+        from dwim.filewrite import write_last_answer
+        ok, msg = write_last_answer(args.write)
+        print(msg, file=sys.stderr)
+        return 0 if ok else 1
+
     if args.action is not None:
         from dwim.action import run_action
         from dwim.context import gather
         from dwim.claude_runner import run as claude_run
+        from dwim.persona import resolve_persona, load_persona, ensure_starters
         from dwim.registry import resolve_role
+        # Seed the shipped starter personas (git/k8s/sql) on first use so `@git`
+        # works out of the box — resolve_persona is side-effect-free, so without
+        # this a fresh install matches nothing until `dwim personas` is run once.
+        ensure_starters()
+        # A persona is selected by an EXACT word-1 match on the intent; otherwise
+        # the whole line is the intent. Prompt-only: no tier/model change here.
+        name, intent = resolve_persona(args.action)
+        ptext = load_persona(name) if name else ""
+        if name:
+            os.environ["DWIM_PERSONA"] = name   # so the spinner can label it
         role = "action_deep" if args.tier == "deep" else "action"
         m = resolve_role(role) or resolve_role("action")
         model = m["model"] if m else ("sonnet" if args.tier == "deep" else "haiku")
@@ -94,11 +132,19 @@ def main(argv=None) -> int:
         # collapses to a one-line breadcrumb; then we print the answer and the
         # command candidates. No separate "thinking…" line — the spinner is it.
         resume = os.environ.get("DWIM_RESUME", "")
-        result = run_action(args.action,
+        result = run_action(intent,
                             runner=lambda p, md: claude_run(p, md, effort, resume=resume),
-                            context=gather(), model=model)
+                            context=gather(), model=model,
+                            persona_text=ptext, persona_name=name or "")
+        from dwim.filewrite import store_answer
+        store_answer(result["answer"])   # so a later dwim-write can save it
         if result["answer"]:
-            print(f"{cyan}✦{reset} {result['answer']}", file=sys.stderr)
+            from dwim.render import render
+            shown = render(result["answer"], _term_width())
+            # multi-line render (a table/code block) prints BELOW the ✦ marker so
+            # its column alignment isn't offset by the "✦ " prefix.
+            sep = "\n" if "\n" in shown else " "
+            print(f"{cyan}✦{reset}{sep}{shown}", file=sys.stderr)
         for c in result["commands"]:
             # "<plain-English desc>\t<command>" — fzf shows the desc, previews
             # the command, and loads the command on select.
@@ -112,33 +158,41 @@ def main(argv=None) -> int:
                 _sf.write(sid)
         except OSError:
             pass
-        return 0 if result["commands"] else 1
+        # Success if we produced anything useful — commands OR an answer. An
+        # answer-only result (a text/explain task) is a valid deliverable, not a
+        # failure, so it must not exit non-zero (that reddens $? and breaks `&&`).
+        return 0 if (result["commands"] or result["answer"]) else 1
 
     if args.run is not None:
         import json
         import shutil
         from dwim.executor import (is_interactive, is_read_only, run_captured,
                                    first_binary)
+        from dwim.highlight import highlight
         cmd = args.run
         interactive = is_interactive(cmd)
         read_only = is_read_only(cmd)
+        # Syntax-highlighted form for the shell to DISPLAY at the consent gate
+        # and in the result panel — display-only, never executed (the shell runs
+        # the raw `cmd`). Lossless: strip_ansi(cmd_hl) == cmd.
+        cmd_hl = highlight(cmd)
         # Execute ONLY when safe (read-only) or explicitly approved (mutating +
         # --force). Interactive commands are never run here.
         may_run = (not interactive) and (read_only or args.force)
         if may_run:
-            out = {"cmd": cmd, "interactive": interactive, "read_only": read_only,
-                   "ran": True, **run_captured(cmd)}
+            out = {"cmd": cmd, "cmd_hl": cmd_hl, "interactive": interactive,
+                   "read_only": read_only, "ran": True, **run_captured(cmd)}
         elif interactive and shutil.which(first_binary(cmd)) is None:
             # Interactive tool that isn't installed → report as not-found so the
             # loop repairs it (offer an install) instead of handing off a dud.
             binv = first_binary(cmd)
-            out = {"cmd": cmd, "interactive": True, "read_only": read_only,
-                   "ran": False, "exit": 127, "stdout": "",
+            out = {"cmd": cmd, "cmd_hl": cmd_hl, "interactive": True,
+                   "read_only": read_only, "ran": False, "exit": 127, "stdout": "",
                    "stderr": f"zsh: command not found: {binv}", "timed_out": False}
         else:
-            out = {"cmd": cmd, "interactive": interactive, "read_only": read_only,
-                   "ran": False, "exit": None, "stdout": "", "stderr": "",
-                   "timed_out": False}
+            out = {"cmd": cmd, "cmd_hl": cmd_hl, "interactive": interactive,
+                   "read_only": read_only, "ran": False, "exit": None, "stdout": "",
+                   "stderr": "", "timed_out": False}
         print(json.dumps(out))
         return 0
 

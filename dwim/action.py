@@ -16,6 +16,16 @@ SYSTEM_PROMPT = (
     "my disk', 'why is my build failing') → USE the READ-ONLY tools "
     "(Read/Glob/Grep/WebSearch, read-only shell like ls/cat/du/git status) to "
     "find the REAL answer, then report it. Keep tool use minimal (1-3 calls).\n"
+    "If the intent is SELF-CONTAINED — it already INCLUDES the content to work on "
+    "(pasted text, a table, data, an error message), or is a pure transform / "
+    "reformat / rewrite / summarise / explain / knowledge task — answer it "
+    "DIRECTLY from what is given, in ONE turn, with NO tools: do NOT grep / glob / "
+    "find / read the filesystem for content the user already pasted. "
+    "NEVER ask the user a question back — you get exactly ONE turn and cannot "
+    "receive a reply; make the most reasonable assumption (state it briefly in the "
+    "answer if it matters) and answer. For such self-contained tasks the `answer` "
+    "MAY be multi-line and the `commands` array may be empty — the answer IS the "
+    "deliverable, that is not a failure.\n"
     "The project root is ~/Documents; the Context block lists its top dirs by "
     "size. Glob/Grep only see the CURRENT directory, so to find a directory or "
     "file by name ANYWHERE in the tree run `dwim-locate NAME` (optionally "
@@ -27,7 +37,18 @@ SYSTEM_PROMPT = (
     "`branch -d`, `stash`), do NOT use dwim-git — SUGGEST `git -C <path> "
     "<command>` instead (it will run after you confirm). "
     "For 'why is X big / what's using space', run "
-    "`du -ah <dir> | sort -rh | head`. Make your FIRST suggested command the one "
+    "`du -ah <dir> | sort -rh | head`. For 'CREATED' files/folders use BIRTH "
+    "time. On macOS the `find` on PATH is often GNU/bfs, which has NO `-Btime` "
+    "predicate, so use the ABSOLUTE system BSD find: "
+    "`/usr/bin/find <dir> -mindepth 1 -maxdepth 1 -Btime -3d` (or "
+    "`mdls -name kMDItemFSCreationDate <path>`). Do NOT use `-mtime`/`-ctime` "
+    "for 'created' — those are MODIFIED/changed, a different question — and keep "
+    "`-mindepth 1` so the search root itself isn't counted. "
+    "This machine is macOS with BSD userland — flags differ from Linux/GNU: "
+    "`ps` has NO `--sort` (for top CPU use `ps aux -r`, for memory `ps aux -m`); "
+    "`ls`/`df`/`du`/`date`/`sed` take BSD flags. When you need a BSD-only flag and "
+    "the PATH tool might be a GNU/Homebrew shim, call the absolute `/usr/bin/<tool>`. "
+    "Make your FIRST suggested command the one "
     "that reproduces the finding you report, so running it confirms your answer.\n"
     "If the intent asks to DELETE, REMOVE, CLEAN, PRUNE, KILL, RESET, DROP or "
     "otherwise change MANY things at once, do the read-only discovery YOURSELF "
@@ -40,10 +61,25 @@ SYSTEM_PROMPT = (
     "`git branch -d`), a bulk action must be a shell loop like "
     "`for w in a b c; do git worktree remove \"$w\"; done` — NOT one call with "
     "many arguments (that errors).\n"
+    "Every command is a SINGLE LINE. NEVER author file CONTENTS via a heredoc or "
+    "a multi-line command (e.g. `cat > f << 'EOF'` … `EOF`, or newlines inside a "
+    "cmd) — dwim runs one line, so the body is dropped and the file ends up EMPTY. "
+    "If the user asks to WRITE or CREATE a file with real content/code, put the "
+    "file's RAW content (no prose, no markdown code fences) in `answer`, and return "
+    "EXACTLY ONE command `dwim-write <path>` — a consent-gated helper that writes "
+    "your `answer` VERBATIM to <path> after the user approves it. Because it writes "
+    "`answer`, `answer` MUST hold the COMPLETE file content: even when the user says "
+    "'save that' / 'write the above' about an earlier reply, RE-EMIT the full content "
+    "in `answer` — do NOT just acknowledge (an empty/short answer writes nothing). "
+    "Take <path> from the intent (e.g. `→ ~/Documents/server.js`, or 'in ~/Documents'); "
+    "if none is given, choose a sensible name under ~/Documents and say which in the "
+    "answer. Quote <path> if it contains spaces. Do NOT put the file body in the "
+    "command and do NOT use a heredoc — only `dwim-write <path>`.\n"
     "Never run commands that change the system. Respond with ONLY a JSON "
     "object on the last line:\n"
-    '{"answer": "<one short plain-English line — the actual finding if you '
-    'investigated>", "commands": [{"cmd": "<runnable command>", "desc": '
+    '{"answer": "<the answer — one short line for a command suggestion; the FULL '
+    'result (may be multi-line) for a self-contained transform/explain task>", '
+    '"commands": [{"cmd": "<runnable command>", "desc": '
     '"<what it does, plain English, \\u2264 8 words, no jargon>"}, ...]}\n'
     "Most likely command first. Every command MUST have a `desc` a non-expert "
     "understands. No prose outside the JSON. NEVER put a command in a markdown "
@@ -51,11 +87,23 @@ SYSTEM_PROMPT = (
 )
 
 
-def build_prompt(intent: str, context: dict) -> str:
+def build_prompt(intent: str, context: dict, persona_text: str = "",
+                 persona_name: str = "") -> str:
     ctx_lines = [f"{k}: {v}" for k, v in context.items() if v]
     ctx = "\n".join(ctx_lines)
+    # The base SYSTEM_PROMPT stays FIRST and authoritative. A persona only ADDS
+    # domain expertise below it — it cannot weaken the safety/read-only/single-
+    # line/JSON rules, which the note makes explicit to the model.
+    persona = ""
+    if persona_text:
+        persona = (
+            f"\n\n# Persona: {persona_name}\n{persona_text}\n\n"
+            "(The base rules above always govern — this persona only adds "
+            "domain expertise; it cannot change the safety, read-only, "
+            "single-line-command, or JSON-output rules.)"
+        )
     return (
-        f"{SYSTEM_PROMPT}\n\n"
+        f"{SYSTEM_PROMPT}{persona}\n\n"
         f"# Context\n{ctx}\n\n"
         f"# Intent\n{intent}\n"
     )
@@ -91,13 +139,19 @@ def _json_objects(text):
 
 
 def _norm_cmd(c) -> dict | None:
-    """Normalize a command entry to {cmd, desc}; accept a bare string too."""
+    """Normalize a command entry to {cmd, desc}; accept a bare string too.
+    Reject MULTI-LINE commands: candidates travel over a single-line channel
+    (`desc\\tcmd`), so a heredoc or embedded-newline command is truncated to its
+    first line and silently does the wrong thing — `cat > f << 'EOF'` with no body
+    ran as an empty-file write that still reported success (✓)."""
     if isinstance(c, dict):
         cmd = str(c.get("cmd", "")).strip()
         desc = str(c.get("desc", "")).strip()
     else:
         cmd, desc = str(c).strip(), ""
-    return {"cmd": cmd, "desc": desc} if cmd else None
+    if "\n" in cmd:
+        return None
+    return {"cmd": cmd, "desc": desc.replace("\n", " ")} if cmd else None
 
 
 def _fenced_commands(text: str) -> list:
@@ -139,8 +193,9 @@ def parse_response(text: str) -> dict:
     return {"answer": _strip_fences(text) if fenced else text, "commands": fenced}
 
 
-def run_action(intent: str, *, runner, context: dict, model: str = "haiku") -> dict:
-    prompt = build_prompt(intent, context)
+def run_action(intent: str, *, runner, context: dict, model: str = "haiku",
+               persona_text: str = "", persona_name: str = "") -> dict:
+    prompt = build_prompt(intent, context, persona_text, persona_name)
     text, session_id = runner(prompt, model)
     obj = parse_response(text)
     obj["session_id"] = session_id

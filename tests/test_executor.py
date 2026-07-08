@@ -157,3 +157,31 @@ def test_read_only_allows_dwim_locate_but_not_chained():
     assert is_read_only("dwim-locate the-daily-you ~")
     assert not is_read_only("dwim-locate x; rm -rf y")
     assert not is_read_only("dwim-locate x && rm y")
+
+
+def test_run_captured_reports_duration():
+    from dwim.executor import run_captured
+    r = run_captured("echo hi")
+    assert r["exit"] == 0 and "hi" in r["stdout"]
+    assert isinstance(r["duration"], (int, float)) and r["duration"] >= 0
+
+
+def test_run_captured_uses_last_stage_exit_no_pipefail():
+    from dwim.executor import run_captured
+    # We deliberately do NOT use pipefail: a benign non-zero upstream stage must
+    # NOT be reported as a failure. `grep no-match | head` (grep exits 1 on no
+    # match) is a normal, successful command — the pipeline's exit is head's 0.
+    r = run_captured("grep zzz-no-such-line /etc/hosts | head -1")
+    assert r["exit"] == 0
+    # clean pipeline still succeeds
+    ok = run_captured("echo hi | head -1")
+    assert ok["exit"] == 0 and "hi" in ok["stdout"]
+
+
+def test_dwim_write_requires_consent_never_auto_runs():
+    from dwim.executor import is_read_only
+    # dwim-write MUST be treated as mutating so it always hits the consent gate.
+    assert not is_read_only("dwim-write ~/Documents/server.js")
+    # a chained mutation is still rejected
+    assert not is_read_only("dwim-write x; rm -rf y")
+    assert not is_read_only("dwim-write x && rm y")

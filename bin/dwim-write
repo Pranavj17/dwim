@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Consent-gated file writer for the dwim @ agent. The agent proposes
+# `dwim-write <path>`; after the user approves at the ⚠ gate, this writes the
+# last @ answer (from the dwim cache) to <path>. Deliberately NOT on the
+# read-only allowlist, so it never auto-runs. All the logic (empty-answer
+# refusal, mkdir -p, overwrite) lives in `dwim-engine --write`, which is tested.
+set -euo pipefail
+path="${1:-}"
+[[ -z "$path" ]] && { echo "usage: dwim-write <path>" >&2; exit 2; }
+exec dwim-engine --write "$path"

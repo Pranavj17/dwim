@@ -350,3 +350,14 @@ def test_render_suppresses_no_output_placeholder():
                                        "(Bash completed with no output)"), sink)
     assert sink.steps == ["git status --short"]
     assert sink.outputs == []                     # placeholder suppressed, not passed on
+
+
+def test_streamui_breadcrumb_includes_thread(tmp_path, monkeypatch):
+    import io
+    from dwim.claude_runner import _StreamUI
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    ui = _StreamUI("dwim · haiku", out=io.StringIO(), thread="2")
+    ui.step("du -sh .")
+    ui.finish()
+    shown = ui._out.getvalue()
+    assert "thread 2" in shown            # continuing-thread context persists in the breadcrumb

@@ -184,9 +184,10 @@ class _StreamUI:
     shared state under a lock. On a non-tty (pipe/test) nothing animates — the
     breadcrumb still prints once at the end."""
 
-    def __init__(self, label, out=None):
+    def __init__(self, label, out=None, thread=""):
         self._out = out if out is not None else sys.stderr
         self._label = label
+        self._thread_no = thread       # continuing-thread number, shown in the status
         self._current = ""
         self._steps = []
         self._trace = []
@@ -207,6 +208,8 @@ class _StreamUI:
                 cur = self._current
             frame = _SPINNER[i % len(_SPINNER)]
             line = f"\r\033[K{_GRAY}{frame} {self._label}"
+            if self._thread_no:
+                line += f" · thread {self._thread_no}"
             if cur:
                 line += f" · {_short(cur)}"
             self._out.write(line + _RESET)
@@ -254,7 +257,8 @@ class _StreamUI:
             return ""
         shown = self._steps[:6]
         more = f" +{len(self._steps) - 6}" if len(self._steps) > 6 else ""
-        return (f"{_GRAY}⋯ {len(self._steps)} "
+        thread = f"thread {self._thread_no} · " if self._thread_no else ""
+        return (f"{_GRAY}⋯ {thread}{len(self._steps)} "
                 f"step{'s' if len(self._steps) != 1 else ''} · "
                 f"{' · '.join(shown)}{more}{_RESET}")
 
@@ -301,7 +305,14 @@ def run(prompt: str, model: str, effort: str = "", resume: str = "",
     if not shutil.which("claude"):
         return ('{"answer": "dwim: claude CLI not found — @ palette needs it.", '
                 '"commands": []}', "")
-    sink = _StreamUI(f"dwim · {model}")
+    _thread = os.environ.get("DWIM_THREAD", "").strip()
+    if _thread in ("0", ""):
+        _thread = ""
+    # Fold the active persona into the label (same env-driven pattern as thread)
+    # so the spinner/breadcrumb reads e.g. `dwim · haiku · git`.
+    _persona = os.environ.get("DWIM_PERSONA", "").strip()
+    label = f"dwim · {model}" + (f" · {_persona}" if _persona else "")
+    sink = _StreamUI(label, thread=_thread)
     sink.start()
     try:
         text, session_id, got = _run_once(

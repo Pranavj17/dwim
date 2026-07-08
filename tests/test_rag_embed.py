@@ -11,3 +11,8 @@ def test_embeddings_shape_and_normalized():
 def test_embed_empty_list():
     E = embed_texts([])
     assert E.shape == (0, 384)
+
+
+def test_embed_long_text_truncates_no_crash():
+    E = embed_texts(["word " * 3000])            # ~3000 tokens > bge's 512
+    assert E.shape == (1, 384)

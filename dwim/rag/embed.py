@@ -20,7 +20,11 @@ def _load(model_name):
 
 
 def _one(model, tok, text):
-    r = model(tok.encode(text or " ", return_tensors="mlx"))
+    # truncate to the model's 512-token limit — a dense/minified chunk can exceed
+    # it (verified: a 40-line chunk tokenized to 2002 tokens) and overflow bge's
+    # position embeddings, which would abort the whole index build on one bad chunk.
+    r = model(tok.encode(text or " ", return_tensors="mlx",
+                         truncation=True, max_length=512))
     v = getattr(r, "text_embeds", None)
     if v is None:
         v = getattr(r, "pooler_output", None)

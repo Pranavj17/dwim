@@ -49,8 +49,13 @@ def build(roots, excludes, exts, max_kb, model):
         except OSError:
             continue
         h = _sha1(text)
-        if prev_files.get(p, {}).get("hash") == h and p in old_by_file:
-            for c, v in old_by_file[p]:
+        # Fast-path on an unchanged hash regardless of chunk count: a file that is
+        # empty/all-blank produces 0 chunks (absent from old_by_file), so requiring
+        # `p in old_by_file` re-read+re-chunked it every run. `.get(p, [])` reuses
+        # its (possibly empty) chunks. old_by_file is only populated from a
+        # length-consistent index, so this can't resurrect stale rows.
+        if prev_files.get(p, {}).get("hash") == h:
+            for c, v in old_by_file.get(p, []):
                 new_chunks.append(c); new_rows.append(v)
             skipped += 1
         else:

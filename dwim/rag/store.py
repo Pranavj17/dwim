@@ -16,22 +16,26 @@ def _p(name):
 
 
 def load_index():
+    # Catch broadly (not just OSError): a truncated vectors.npy raises numpy
+    # ValueError, and a torn chunks.jsonl / manifest.json raises JSONDecodeError.
+    # A corrupt index must degrade to "absent" (empty), so callers rebuild rather
+    # than crash — `dwim-rag` auto-runs for the agent.
     try:
         vectors = np.load(_p("vectors.npy"))
-    except OSError:
+    except Exception:
         vectors = None
     chunks = []
     try:
         with open(_p("chunks.jsonl")) as f:
             chunks = [json.loads(x) for x in f if x.strip()]
-    except OSError:
-        pass
+    except Exception:
+        chunks = []
     manifest = {}
     try:
         with open(_p("manifest.json")) as f:
             manifest = json.load(f)
-    except OSError:
-        pass
+    except Exception:
+        manifest = {}
     return vectors, chunks, manifest
 
 

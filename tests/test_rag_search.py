@@ -16,3 +16,14 @@ def test_search_returns_nearest(monkeypatch, tmp_path):
 def test_search_missing_index_returns_empty(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "empty"))
     assert S.search("q") == []
+
+
+def test_search_torn_index_returns_empty(monkeypatch, tmp_path):
+    import numpy as np
+    from dwim.rag import store
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    # 3 vector rows but only 1 chunk (a crash mid-index) → must not IndexError
+    store.save_index(np.eye(3, dtype="float32"),
+                     [{"file": "a", "start": 1, "end": 2, "text": "A"}],
+                     {"model": "m", "dim": 3, "files": {}})
+    assert S.search("q", k=3) == []

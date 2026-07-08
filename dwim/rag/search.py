@@ -8,7 +8,11 @@ from dwim.rag.embed import DEFAULT, embed_texts
 
 def search(query, k=5):
     vectors, chunks, manifest = store.load_index()
-    if vectors is None or len(chunks) == 0:
+    # A torn index (a crash mid-`dwim index` leaves vectors.npy and chunks.jsonl
+    # with different row counts) would make chunks[i] IndexError below. This tool
+    # auto-runs for the agent, so degrade to [] instead of crashing — the next
+    # `dwim index` rebuilds it.
+    if vectors is None or len(chunks) == 0 or len(chunks) != len(vectors):
         return []
     model = (manifest or {}).get("model", DEFAULT)
     q = embed_texts([query], model)[0]

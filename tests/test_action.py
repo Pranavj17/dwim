@@ -194,7 +194,7 @@ def test_prompt_forbids_heredoc_file_authoring():
     from dwim.action import SYSTEM_PROMPT
     p = SYSTEM_PROMPT.lower()
     assert "single line" in p and "heredoc" in p
-    assert "claude" in p and "editor" in p        # points authoring at the right tool
+    assert "dwim-write" in p                      # points authoring at the write helper
 
 
 def test_build_prompt_with_persona_includes_base_and_persona_section():
@@ -252,3 +252,16 @@ def test_prompt_handles_self_contained_and_forbids_clarifying_questions():
     assert "no tools" in p and "already pasted" in p   # don't grep the FS for pasted content
     assert "never ask the user" in p          # no clarifying-question dead-ends
     assert "may be multi-line" in p           # answer can be the deliverable
+
+
+def test_write_intent_yields_dwim_write():
+    from dwim.action import run_action
+    # A fake runner that returns what a compliant model would for a write intent.
+    def fake(prompt, model):
+        assert "dwim-write" in prompt   # prompt must teach the command
+        return ('{"answer": "const express = require(\'express\')\\napp.listen(3000)",'
+                ' "commands": [{"cmd": "dwim-write ~/Documents/server.js",'
+                ' "desc": "write the server file"}]}', "sid")
+    out = run_action("write an express server → ~/Documents/server.js",
+                     runner=fake, context={})
+    assert out["commands"][0]["cmd"].startswith("dwim-write ")

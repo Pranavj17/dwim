@@ -176,3 +176,12 @@ def test_run_captured_uses_last_stage_exit_no_pipefail():
     # clean pipeline still succeeds
     ok = run_captured("echo hi | head -1")
     assert ok["exit"] == 0 and "hi" in ok["stdout"]
+
+
+def test_dwim_write_requires_consent_never_auto_runs():
+    from dwim.executor import is_read_only
+    # dwim-write MUST be treated as mutating so it always hits the consent gate.
+    assert not is_read_only("dwim-write ~/Documents/server.js")
+    # a chained mutation is still rejected
+    assert not is_read_only("dwim-write x; rm -rf y")
+    assert not is_read_only("dwim-write x && rm y")

@@ -362,3 +362,30 @@ def test_streamui_breadcrumb_includes_thread(tmp_path, monkeypatch):
     ui.finish()
     shown = ui._out.getvalue()
     assert "thread 2" in shown            # continuing-thread context persists in the breadcrumb
+
+
+def test_parse_stream_result_extracts_text_and_session():
+    # The execute phase reuses the same stream parser but only needs the final
+    # text + session — no live UI. parse_stream_result runs it over a captured
+    # stdout blob and returns (final_text, session_id).
+    from dwim.claude_runner import parse_stream_result
+    stdout = "\n".join(_events(
+        {"type": "system", "session_id": "sess-exec"},
+        {"type": "assistant", "session_id": "sess-exec", "message": {"content": [
+            {"type": "tool_use", "id": "t1", "name": "Bash",
+             "input": {"command": "pytest -q"}}]}},
+        {"type": "user", "session_id": "sess-exec", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": "1 passed"}]}},
+        {"type": "result", "session_id": "sess-exec", "result": "done: tests green"},
+    ))
+    text, session = parse_stream_result(stdout)
+    assert text == "done: tests green"
+    assert session == "sess-exec"
+
+
+def test_parse_stream_result_handles_empty_and_partial():
+    from dwim.claude_runner import parse_stream_result
+    assert parse_stream_result("") == ("", "")
+    # a stream cut off before the result event → text empty, session still recovered
+    partial = "\n".join(_events({"type": "system", "session_id": "sX"}))
+    assert parse_stream_result(partial) == ("", "sX")

@@ -148,6 +148,33 @@ def _render_events(lines, sink):
     return result_text, session_id, got_result
 
 
+class _NullSink:
+    """A sink that discards every event — for parsing a captured stream when
+    there's no live UI to drive (e.g. the execute phase reads a finished
+    stdout blob, not a live pipe)."""
+
+    def step(self, desc):
+        pass
+
+    def output(self, body):
+        pass
+
+    def error(self, desc, status, body):
+        pass
+
+    def note(self, msg):
+        pass
+
+
+def parse_stream_result(stdout: str):
+    """Extract (final_text, session_id) from a captured stream-json stdout blob.
+    Shares the exact event-parsing logic `run()` uses live (`_render_events`),
+    so the execute-phase runner and the read-only `run()` stay in lockstep."""
+    lines = (stdout or "").splitlines()
+    text, session_id, _got = _render_events(lines, _NullSink())
+    return text, session_id
+
+
 _SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 
 

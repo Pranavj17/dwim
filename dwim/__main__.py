@@ -66,7 +66,67 @@ def main(argv=None) -> int:
     parser.add_argument("--rag", metavar="QUERY",
                         help="semantic-search the RAG index; print file:line hits")
     parser.add_argument("--k", type=int, default=5, help="with --rag: number of hits")
+    parser.add_argument("--classify", metavar="TEXT",
+                        help="print whether TEXT is a 'task' or 'question', then exit")
+    parser.add_argument("--plan", metavar="TEXT",
+                        help="form a read-only plan for TEXT; render it + persist for --do")
+    parser.add_argument("--do", action="store_true",
+                        help="execute the approved plan at --plan-file")
+    parser.add_argument("--plan-file", metavar="PATH",
+                        help="with --do: path to the persisted approved-plan JSON")
+    parser.add_argument("--confine-hook", action="store_true",
+                        help="PreToolUse hook: deny edits/commands outside the approved plan")
     args = parser.parse_args(argv)
+
+    if args.confine_hook:
+        from dwim.agent.confine_hook import main as hook_main
+        return hook_main()
+
+    if args.classify is not None:
+        from dwim.classify import classify
+        print(classify(args.classify))
+        return 0
+
+    if args.plan is not None:
+        import json
+        from dwim.agent.planner import make_plan
+        from dwim.agent.plan_render import render_plan
+        from dwim.config import agent_config
+        cfg = agent_config()
+        plan = make_plan(args.plan, cfg["model"], cfg["timeout"])
+        if plan is None:
+            print("dwim: couldn't form a plan — try rephrasing, or ask read-only with @.",
+                  file=sys.stderr)
+            return 1
+        print(render_plan(plan))
+        cache = os.path.join(os.environ.get("XDG_CACHE_HOME",
+                             os.path.expanduser("~/.cache")), "dwim", "agent")
+        os.makedirs(cache, exist_ok=True)
+        pf = os.path.join(cache, "pending_plan.json")
+        # Persist the full task + steps (not just files/commands) so --do can
+        # rebuild the Plan and hand the execute agent the step detail it needs.
+        with open(pf, "w") as f:
+            json.dump({"task": args.plan, "steps": plan.steps,
+                       "files": sorted(plan.files()), "commands": plan.commands()}, f)
+        print(f"DWIM_PLAN_READY {pf}")
+        return 0
+
+    if args.do:
+        import json
+        import subprocess
+        from dwim.agent.execute import execute
+        from dwim.agent.plan import Plan
+        from dwim.config import agent_config
+        root = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                              capture_output=True, text=True).stdout.strip() or os.getcwd()
+        with open(args.plan_file) as f:
+            raw = json.load(f)
+        plan = Plan(raw.get("steps", []))
+        out = execute(plan, root, agent_config(), task=raw.get("task", ""))
+        print(out["report"])
+        if out["snapshot"]:
+            print(f"\n· rollback: git stash apply {out['snapshot']}", file=sys.stderr)
+        return 0
 
     if args.status:
         return _print_status()

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# PreToolUse hook for dwim's execute phase. Delegates to the Python decision core.
+exec dwim-engine --confine-hook

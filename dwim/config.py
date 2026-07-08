@@ -52,3 +52,20 @@ def rag_config(path=None):
         if k in out:
             out[k] = v
     return out
+
+
+_AGENT_DEFAULTS = {
+    "model": "claude-sonnet-5",   # loop needs a real coding model, not haiku
+    "max_iterations": 12,
+    "timeout": 600,
+}
+
+
+def agent_config(path=None):
+    path = path or os.path.join(_config_base(), "config.toml")
+    data = {}
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    tbl = data.get("agent", {})
+    return {k: tbl.get(k, v) for k, v in _AGENT_DEFAULTS.items()}

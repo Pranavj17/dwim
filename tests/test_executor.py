@@ -185,3 +185,9 @@ def test_dwim_write_requires_consent_never_auto_runs():
     # a chained mutation is still rejected
     assert not is_read_only("dwim-write x; rm -rf y")
     assert not is_read_only("dwim-write x && rm y")
+
+
+def test_dwim_rag_is_read_only_autoruns():
+    from dwim.executor import is_read_only
+    assert is_read_only('dwim-rag "how do I revert"')
+    assert not is_read_only('dwim-rag x; rm -rf y')

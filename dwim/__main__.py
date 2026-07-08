@@ -61,6 +61,11 @@ def main(argv=None) -> int:
                         help="read a JSON history array on stdin; print repair candidates")
     parser.add_argument("--write", metavar="PATH",
                         help="write the last @ answer (cache) to PATH; exit 1 if none")
+    parser.add_argument("--index", nargs="*", metavar="PATH",
+                        help="build/update the RAG index (default: config roots)")
+    parser.add_argument("--rag", metavar="QUERY",
+                        help="semantic-search the RAG index; print file:line hits")
+    parser.add_argument("--k", type=int, default=5, help="with --rag: number of hits")
     args = parser.parse_args(argv)
 
     if args.status:
@@ -209,6 +214,31 @@ def main(argv=None) -> int:
         last = history[-1]
         for c in repair(history, last, runner=lambda p, m: claude_run(p, m)[0]):
             print(f"{c['desc'] or c['cmd']}\t{c['cmd']}")
+        return 0
+
+    if args.index is not None:
+        from dwim.config import rag_config
+        from dwim.rag.index import build
+        cfg = rag_config()
+        roots = args.index or cfg["roots"]
+        s = build(roots, set(cfg["exclude"]), set(cfg["extensions"]),
+                  cfg["max_file_kb"], cfg["model"])
+        print(f"indexed {s['files']} files · {s['chunks']} chunks "
+              f"({s['added']} changed, {s['skipped']} cached, {s['removed']} removed)",
+              file=sys.stderr)
+        return 0
+
+    if args.rag is not None:
+        from dwim.rag.search import search
+        hits = search(args.rag, args.k)
+        if not hits:
+            print("· no RAG index yet — run `dwim index`", file=sys.stderr)
+            return 1
+        for h in hits:
+            print(f"{h['file']}:{h['start']}-{h['end']}")
+            for line in h["text"].splitlines():
+                print(f"  {line}")
+            print("---")
         return 0
 
     if not args.cmd or args.exit_code is None:

@@ -75,6 +75,13 @@ SYSTEM_PROMPT = (
     "if none is given, choose a sensible name under ~/Documents and say which in the "
     "answer. Quote <path> if it contains spaces. Do NOT put the file body in the "
     "command and do NOT use a heredoc — only `dwim-write <path>`.\n"
+    "For questions about the USER'S OWN notes, decisions, specs, or code across "
+    "their projects (e.g. 'what did I decide about X', 'where did I write Y', "
+    "'how does my Z work'), call `dwim-rag \"<query>\"` FIRST to retrieve relevant "
+    "local context, then answer grounded in it and cite the `file:line` it came "
+    "from. Prefer dwim-rag over guessing when the question is about what the user "
+    "wrote, decided, or built. If it returns nothing, say the index may be empty "
+    "(they can run `dwim index`).\n"
     "Never run commands that change the system. Respond with ONLY a JSON "
     "object on the last line:\n"
     '{"answer": "<the answer — one short line for a command suggestion; the FULL '

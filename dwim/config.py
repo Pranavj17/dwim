@@ -21,3 +21,29 @@ def load_config(path: str | None = None) -> dict:
     with open(path, "rb") as f:
         data = tomllib.load(f)
     return {"model": data.get("model", DEFAULT_MODEL)}
+
+
+_RAG_DEFAULTS = {
+    "roots": ["~/Documents"],
+    "exclude": [".git", "node_modules", ".venv", "dist", "build", "_build",
+                "deps", "target"],
+    "extensions": [".md", ".txt", ".py", ".ex", ".exs", ".js", ".ts", ".rb",
+                   ".go", ".rs", ".json", ".toml", ".yaml", ".yml", ".sh", ".zsh"],
+    "max_file_kb": 1024,
+    "model": "mlx-community/bge-small-en-v1.5-bf16",
+}
+
+
+def rag_config(path=None):
+    path = path or os.path.join(_config_base(), "config.toml")
+    data = {}
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    rag = data.get("rag", {})
+    out = {k: (list(v) if isinstance(v, list) else v)
+           for k, v in _RAG_DEFAULTS.items()}
+    for k, v in rag.items():
+        if k in out:
+            out[k] = v
+    return out

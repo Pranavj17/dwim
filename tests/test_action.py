@@ -162,3 +162,12 @@ def test_prompt_nudges_loop_for_one_at_a_time_commands():
     from dwim.action import SYSTEM_PROMPT
     p = SYSTEM_PROMPT.lower()
     assert "one target at a time" in p and "worktree remove" in p and "for w in" in p
+
+
+def test_prompt_created_uses_absolute_bsd_find_not_mtime():
+    from dwim.action import SYSTEM_PROMPT
+    p = SYSTEM_PROMPT
+    # 'created' must steer to the absolute system BSD find (PATH find is GNU/bfs,
+    # no -Btime) and away from -mtime (which is 'modified', the wrong question).
+    assert "/usr/bin/find" in p and "-Btime" in p
+    assert "birth" in p.lower()

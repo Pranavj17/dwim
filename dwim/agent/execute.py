@@ -42,7 +42,18 @@ def snapshot(repo_root, run=subprocess.run):
     return h if getattr(r, "returncode", 1) == 0 and h else None
 
 
-def _default_runner(plan_file, repo_root, cfg):
+def _plan_text(plan):
+    lines = []
+    for i, s in enumerate(plan.steps, 1):
+        if s.get("kind") == "edit":
+            d = f" — {s['diff']}" if s.get("diff") else ""
+            lines.append(f"{i}. edit {s.get('path','')}{d}  ({s.get('why','')})")
+        else:
+            lines.append(f"{i}. run {s.get('command','')}  ({s.get('why','')})")
+    return "\n".join(lines)
+
+
+def _default_runner(prompt, plan_file, repo_root, cfg):
     # Confined claude -p, using the flag combination Task 0's spike confirmed:
     # --settings loads the PreToolUse hook; --strict-mcp-config + an empty
     # --mcp-config avoids MCP-tool prompt bloat. Both temp files are generated
@@ -55,7 +66,7 @@ def _default_runner(plan_file, repo_root, cfg):
     mf.close()
     env = dict(os.environ, DWIM_APPROVED_PLAN=plan_file, DWIM_REPO_ROOT=repo_root)
     cmd = [
-        "claude", "-p", _EXEC_SYSTEM,
+        "claude", "-p", prompt,
         "--model", cfg["model"],
         "--allowedTools", "Read", "Grep", "Glob", "Edit", "Write", "Bash",
         "--max-turns", str(cfg["max_iterations"]),   # enforce the iteration cap
@@ -70,10 +81,13 @@ def _default_runner(plan_file, repo_root, cfg):
     return text, session
 
 
-def execute(plan, repo_root, cfg, runner=_default_runner, snapshotter=snapshot):
+def execute(plan, repo_root, cfg, task="", runner=_default_runner, snapshotter=snapshot):
     snap = snapshotter(repo_root)
     plan_file = tempfile.NamedTemporaryFile(
         "w", suffix=".plan.json", delete=False).name
     write_approved_plan(plan, plan_file)
-    report, session = runner(plan_file, repo_root, cfg)
+    prompt = (f"{_EXEC_SYSTEM}\n\nTASK: {task}\n\nAPPROVED PLAN "
+              f"(you may edit only these files and run only these commands):\n"
+              f"{_plan_text(plan)}")
+    report, session = runner(prompt, plan_file, repo_root, cfg)
     return {"snapshot": snap, "session": session, "report": report}

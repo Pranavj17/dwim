@@ -28,14 +28,20 @@ def test_snapshot_none_on_failure():
 
 def test_execute_calls_runner_and_reports(tmp_path):
     calls = {}
-    def fake_runner(plan_file, repo_root, cfg):
+    def fake_runner(prompt, plan_file, repo_root, cfg):
         calls["plan_file"] = plan_file
+        calls["prompt"] = prompt
         return ("done: 1 file changed, tests green", "sess9")
     def fake_snap(root, **kw):
         return "cafe"
     out = execute(PLAN, str(tmp_path), {"model": "claude-sonnet-5", "max_iterations": 12, "timeout": 600},
+                  task="make the failing test pass",
                   runner=fake_runner, snapshotter=fake_snap)
     assert out["snapshot"] == "cafe" and out["session"] == "sess9"
     assert "green" in out["report"]
     # the plan file the hook reads was written and passed to the runner
     assert json.loads(open(calls["plan_file"]).read())["files"] == ["a.py"]
+    # the runner prompt carries the original task + a planned command
+    captured_prompt = calls["prompt"]
+    assert "make the failing test pass" in captured_prompt
+    assert "pytest" in captured_prompt

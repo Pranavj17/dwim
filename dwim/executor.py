@@ -22,6 +22,9 @@ READ_ONLY_VERBS = frozenset({
     # not trip the mutating-confirm. Chained mutations after it are still caught by
     # the separator scan (e.g. `dwim-locate x; rm y` stays not-read-only).
     "dwim-locate",
+    # dwim-rag is our own read-only local semantic search (reads the cached
+    # index, prints hits; never writes) — safe to auto-run beside dwim-locate.
+    "dwim-rag",
 })
 _READ_ONLY_GIT_SUB = frozenset({"status", "log", "diff"})  # mirror _ALLOWED
 

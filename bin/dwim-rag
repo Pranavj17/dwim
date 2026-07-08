@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Read-only semantic search over the local dwim RAG index, for the @ agent. Takes
+# a query (+ optional k) and prints file:line hits. No writes — safe to auto-run.
+set -euo pipefail
+q="${1:-}"; k="${2:-5}"
+[[ -z "$q" ]] && { echo "usage: dwim-rag <query> [k]" >&2; exit 2; }
+exec dwim-engine --rag "$q" --k "$k"

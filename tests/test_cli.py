@@ -179,3 +179,20 @@ def test_action_stores_raw_answer_not_rendered(monkeypatch, tmp_path, capsys):
     assert stored == "| A | B |\n|---|---|\n| 1 | 2 |"
     err = capsys.readouterr().err
     assert "─" in err                            # the DISPLAY was rendered
+
+
+def test_rag_cli_index_and_search(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    docs = tmp_path / "docs"; docs.mkdir()
+    (docs / "note.md").write_text("the desk preview scope is admin-only\nmore text\n")
+    import dwim.rag.index as idx, numpy as np
+    monkeypatch.setattr(idx, "embed_texts",
+                        lambda ts, m=None: np.ones((len(ts), 4), "float32"))
+    import dwim.rag.search as S
+    monkeypatch.setattr(S, "embed_texts", lambda q, m=None: np.ones((1, 4), "float32"))
+    from dwim.__main__ import main
+    assert main(["--index", str(docs)]) == 0
+    assert main(["--rag", "desk preview scope", "--k", "3"]) == 0
+    out = capsys.readouterr().out
+    assert "note.md:" in out and "desk preview scope is admin-only" in out

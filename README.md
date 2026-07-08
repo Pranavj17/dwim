@@ -1,6 +1,6 @@
 # dwim
 
-**Do What I Mean** — a local-LLM shell command corrector for zsh on Apple Silicon.
+**Do What I Mean** — local-LLM (MLX) shell command corrector for zsh.
 
 You fumble a command, it fails, you type `dwim`, and the corrected command lands
 on your prompt ready to run:

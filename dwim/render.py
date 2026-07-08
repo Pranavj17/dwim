@@ -13,7 +13,8 @@ _CODE = "\033[38;5;79m"     # inline `code` — teal, matches highlight._CMD
 _RESET = "\033[0m"
 
 _SHELL_LANGS = {"", "sh", "bash", "zsh", "shell", "console"}
-_FENCE_RE = re.compile(r"^```(\w*)\s*$")
+# info string is any non-space run (\S*) so `c++`/`c#`/`objective-c` still open a fence
+_FENCE_RE = re.compile(r"^```(\S*)\s*$")
 _TABLE_SEP_RE = re.compile(r"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$")
 _H_RE = re.compile(r"^(#{1,6})\s+(.*)$")
 _UL_RE = re.compile(r"^(\s*)[-*]\s+(.*)$")
@@ -23,11 +24,14 @@ _INLINE_CODE_RE = re.compile(r"`([^`]+)`")
 
 
 def render(text, width=80):
-    """Markdown answer -> ANSI. Never raises: returns the raw text on any error."""
+    """Markdown answer -> ANSI. Always returns a string; falls back to the raw
+    text on any error (never raises)."""
+    if not isinstance(text, str):
+        return ""
     try:
-        return _render(text or "", width)
+        return _render(text, width)
     except Exception:
-        return text or ""
+        return text
 
 
 def _render(text, width):
@@ -68,7 +72,8 @@ def _cells(row):
     row = row.strip()
     if row.startswith("|"): row = row[1:]
     if row.endswith("|"): row = row[:-1]
-    return [c.strip() for c in row.split("|")]
+    # split on UNescaped pipes, then unescape `\|` -> `|` inside each cell
+    return [c.strip().replace("\\|", "|") for c in re.split(r"(?<!\\)\|", row)]
 
 
 def _render_table(block, width):
@@ -92,6 +97,11 @@ def _render_table(block, width):
     while excess > 0 and max(widths) > 3:          # shrink widest cols to fit
         m = widths.index(max(widths))
         widths[m] -= 1; excess -= 1
+    # If even the 3-char floor per column can't fit (too many columns for this
+    # width), an aligned render would overflow and soft-wrap — worse than raw.
+    # Fall back to the raw markdown table for this block.
+    if sum(widths) + gutter * (ncol - 1) > width:
+        return None
 
     def fit(cell, w):
         if len(cell) > w:
@@ -110,7 +120,8 @@ def _render_table(block, width):
 def _render_line(line):
     m = _H_RE.match(line)
     if m:
-        return f"{_BOLD}{_render_inline(m.group(2))}{_RESET}"
+        # heading is all-bold; inner spans reopen _BOLD so they don't cancel it
+        return f"{_BOLD}{_render_inline(m.group(2), reopen=_BOLD)}{_RESET}"
     m = _UL_RE.match(line)
     if m:
         return f"{m.group(1)}• {_render_inline(m.group(2))}"
@@ -120,7 +131,11 @@ def _render_line(line):
     return _render_inline(line)
 
 
-def _render_inline(text):
-    text = _BOLD_RE.sub(lambda m: f"{_BOLD}{m.group(1)}{_RESET}", text)
-    text = _INLINE_CODE_RE.sub(lambda m: f"{_CODE}{m.group(1)}{_RESET}", text)
+def _render_inline(text, reopen=""):
+    # Each span closes with _RESET (clears all SGR) then reopens the ambient
+    # style, so a **bold**/`code` nested inside a bold heading doesn't turn the
+    # rest of the line's boldness off (SGR reset is global, not per-attribute).
+    close = _RESET + reopen
+    text = _BOLD_RE.sub(lambda m: f"{_BOLD}{m.group(1)}{close}", text)
+    text = _INLINE_CODE_RE.sub(lambda m: f"{_CODE}{m.group(1)}{close}", text)
     return text

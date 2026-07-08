@@ -17,7 +17,7 @@ def test_rag_config_defaults(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))   # no config.toml
     from dwim.config import rag_config
     c = rag_config()
-    assert c["roots"] == ["~/Documents"]
+    assert c["roots"] == []          # no implicit corpus — require a path or config
     assert ".md" in c["extensions"] and c["model"].startswith("mlx-community/")
 
 def test_rag_config_override(monkeypatch, tmp_path):

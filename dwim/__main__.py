@@ -221,8 +221,23 @@ def main(argv=None) -> int:
         from dwim.rag.index import build
         cfg = rag_config()
         roots = args.index or cfg["roots"]
+        if not roots:
+            print("dwim index: specify a directory, e.g. "
+                  "`dwim index ~/Documents/helixa`\n"
+                  "  (indexing all of ~/Documents is 30k+ files; set [rag] roots "
+                  "in ~/.config/dwim/config.toml for a default)", file=sys.stderr)
+            return 2
+
+        def _prog(done, total, added, chunks):
+            # live counter on ONE line (\r) so a long index (~/Documents can be
+            # tens of thousands of files) is visibly working, not silent.
+            if done == 1 or done % 25 == 0 or done == total:
+                print(f"\r  indexing {done}/{total} files · {chunks} chunks "
+                      f"({added} embedding)…", end="", file=sys.stderr, flush=True)
+
         s = build(roots, set(cfg["exclude"]), set(cfg["extensions"]),
-                  cfg["max_file_kb"], cfg["model"])
+                  cfg["max_file_kb"], cfg["model"], progress=_prog)
+        print("", file=sys.stderr)   # end the \r progress line
         print(f"indexed {s['files']} files · {s['chunks']} chunks "
               f"({s['added']} changed, {s['skipped']} cached, {s['removed']} removed)",
               file=sys.stderr)

@@ -196,3 +196,12 @@ def test_rag_cli_index_and_search(monkeypatch, tmp_path, capsys):
     assert main(["--rag", "desk preview scope", "--k", "3"]) == 0
     out = capsys.readouterr().out
     assert "note.md:" in out and "desk preview scope is admin-only" in out
+
+
+def test_rag_index_no_path_no_default_prints_hint(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))   # no [rag] roots
+    from dwim.__main__ import main
+    rc = main(["--index"])                       # no path, no configured root
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "specify a directory" in err

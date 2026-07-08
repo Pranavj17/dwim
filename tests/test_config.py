@@ -28,3 +28,20 @@ def test_rag_config_override(monkeypatch, tmp_path):
     c = rag_config()
     assert c["roots"] == ["~/notes"] and c["max_file_kb"] == 50
     assert ".md" in c["extensions"]                        # defaults kept for unset keys
+
+
+def test_agent_config_defaults(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    from dwim.config import agent_config
+    c = agent_config()
+    assert c["model"] == "claude-sonnet-5"
+    assert c["max_iterations"] == 12 and c["timeout"] == 600
+
+def test_agent_config_override(monkeypatch, tmp_path):
+    d = tmp_path / "dwim"; d.mkdir()
+    (d / "config.toml").write_text('[agent]\nmodel = "claude-opus-4-8"\nmax_iterations = 5\n')
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    from dwim.config import agent_config
+    c = agent_config()
+    assert c["model"] == "claude-opus-4-8" and c["max_iterations"] == 5
+    assert c["timeout"] == 600   # unset key keeps default

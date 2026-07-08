@@ -23,7 +23,8 @@ _DENY_CMD = re.compile(
 
 # Chaining / redirection / command-substitution: if present, the command is NOT
 # a simple read-only command — it must match the approved plan exactly or be denied.
-_SHELL_META = re.compile(r"[>|;&<]|\$\(|`")
+# Newlines count: a shell runs `cat x\nrm y` as two commands, so \n/\r must gate too.
+_SHELL_META = re.compile(r"[>|;&<\n\r]|\$\(|`")
 _CRED = ["*.pem", "*.key", ".env", ".env.*", "id_*", "*credential*", "*secret*"]
 
 

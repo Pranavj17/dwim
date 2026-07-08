@@ -243,3 +243,12 @@ def test_run_action_threads_persona_text_into_prompt():
     assert [c["cmd"] for c in out["commands"]] == ["git status"]
     assert "# Persona: git" in captured["prompt"]
     assert "prefer --force-with-lease" in captured["prompt"]
+
+
+def test_prompt_handles_self_contained_and_forbids_clarifying_questions():
+    from dwim.action import SYSTEM_PROMPT
+    p = SYSTEM_PROMPT.lower()
+    assert "self-contained" in p              # pasted-content/transform tasks answered directly
+    assert "no tools" in p and "already pasted" in p   # don't grep the FS for pasted content
+    assert "never ask the user" in p          # no clarifying-question dead-ends
+    assert "may be multi-line" in p           # answer can be the deliverable

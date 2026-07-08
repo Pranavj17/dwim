@@ -178,3 +178,20 @@ def test_prompt_macos_bsd_tools_nudge():
     p = SYSTEM_PROMPT
     assert "BSD" in p and "--sort" in p        # steer away from Linux ps --sort
     assert "ps aux -r" in p                     # the macOS way to sort by CPU
+
+
+def test_parse_drops_multiline_heredoc_command():
+    # A heredoc can't survive the single-line desc\tcmd channel — it must be
+    # dropped, not offered as a truncated `cat > f << EOF` that writes an empty file.
+    raw = ('{"answer":"use your editor","commands":['
+           '{"cmd":"cat > f.js << \'EOF\'\\nconst x=1\\nEOF","desc":"write file"}]}')
+    out = parse_response(raw)
+    assert out["commands"] == []
+    assert "editor" in out["answer"]
+
+
+def test_prompt_forbids_heredoc_file_authoring():
+    from dwim.action import SYSTEM_PROMPT
+    p = SYSTEM_PROMPT.lower()
+    assert "single line" in p and "heredoc" in p
+    assert "claude" in p and "editor" in p        # points authoring at the right tool

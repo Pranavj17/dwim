@@ -51,6 +51,13 @@ SYSTEM_PROMPT = (
     "`git branch -d`), a bulk action must be a shell loop like "
     "`for w in a b c; do git worktree remove \"$w\"; done` — NOT one call with "
     "many arguments (that errors).\n"
+    "Every command is a SINGLE LINE. NEVER author file CONTENTS via a heredoc or "
+    "a multi-line command (e.g. `cat > f << 'EOF'` … `EOF`, or newlines inside a "
+    "cmd) — dwim runs one line, so the body is dropped and the file ends up EMPTY. "
+    "If the user asks to WRITE or CREATE a file with real content/code, do NOT "
+    "return a command: put a short note in `answer` telling them to use their "
+    "editor or `claude` (Claude Code), which authors files — dwim only runs "
+    "one-line commands and investigates read-only.\n"
     "Never run commands that change the system. Respond with ONLY a JSON "
     "object on the last line:\n"
     '{"answer": "<one short plain-English line — the actual finding if you '
@@ -102,13 +109,19 @@ def _json_objects(text):
 
 
 def _norm_cmd(c) -> dict | None:
-    """Normalize a command entry to {cmd, desc}; accept a bare string too."""
+    """Normalize a command entry to {cmd, desc}; accept a bare string too.
+    Reject MULTI-LINE commands: candidates travel over a single-line channel
+    (`desc\\tcmd`), so a heredoc or embedded-newline command is truncated to its
+    first line and silently does the wrong thing — `cat > f << 'EOF'` with no body
+    ran as an empty-file write that still reported success (✓)."""
     if isinstance(c, dict):
         cmd = str(c.get("cmd", "")).strip()
         desc = str(c.get("desc", "")).strip()
     else:
         cmd, desc = str(c).strip(), ""
-    return {"cmd": cmd, "desc": desc} if cmd else None
+    if "\n" in cmd:
+        return None
+    return {"cmd": cmd, "desc": desc.replace("\n", " ")} if cmd else None
 
 
 def _fenced_commands(text: str) -> list:

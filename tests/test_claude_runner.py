@@ -27,6 +27,7 @@ _KNOWN_SAFE = {
     "Bash(rg:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(pwd)",
     "Bash(dwim-locate:*)",
     "Bash(dwim-git:*)",
+    "Bash(dwim-rag:*)",
 }
 
 

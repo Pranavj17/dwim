@@ -7,6 +7,7 @@ import signal
 import subprocess
 import sys
 import threading
+import time
 
 # Read-only tools + read-only shell verbs. Mutating bash is NOT allowed, so the
 # agent proposes such commands instead of running them.
@@ -196,8 +197,10 @@ class _StreamUI:
         self._stop = threading.Event()
         self._thread = None
         self._tty = bool(getattr(self._out, "isatty", lambda: False)())
+        self._start_time = None    # set in start(); None means "never started" (elapsed unknown)
 
     def start(self):
+        self._start_time = time.perf_counter()
         if self._tty:
             self._thread = threading.Thread(target=self._spin, daemon=True)
             self._thread.start()
@@ -248,20 +251,30 @@ class _StreamUI:
         _write_thinking("\n".join(self._trace))
         if self._tty:
             self._out.write("\r\033[K")   # wipe the spinner line
-        crumb = self._breadcrumb()
+        elapsed = (time.perf_counter() - self._start_time) if self._start_time is not None else None
+        crumb = self._breadcrumb(elapsed)
         if crumb:
             self._out.write(crumb + "\n")
         self._out.flush()
 
-    def _breadcrumb(self):
+    def _breadcrumb(self, elapsed=None):
+        # `elapsed` is the agent's own wall-clock time (start() → finish()) — NOT
+        # a shell command's duration (that's executor.py's honest per-command
+        # timer). Without this, the panel's "· 0.03s" reads as the whole @ took
+        # 0.03s, when it's only the last command's runtime.
+        timing = f" · {elapsed:.1f}s" if elapsed is not None else ""
         if not self._steps:
-            return ""
+            # Tool-less answer: no step crumbs, but still show how long the
+            # model took, so the run isn't silently unaccounted for.
+            if elapsed is None:
+                return ""
+            return f"{_GRAY}⋯ {self._label}{timing}{_RESET}"
         shown = self._steps[:6]
         more = f" +{len(self._steps) - 6}" if len(self._steps) > 6 else ""
         thread = f"thread {self._thread_no} · " if self._thread_no else ""
         return (f"{_GRAY}⋯ {thread}{len(self._steps)} "
                 f"step{'s' if len(self._steps) != 1 else ''} · "
-                f"{' · '.join(shown)}{more}{_RESET}")
+                f"{' · '.join(shown)}{more}{timing}{_RESET}")
 
 
 def _run_once(cmd, sink, timeout):

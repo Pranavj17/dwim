@@ -237,6 +237,26 @@ def test_run_gives_up_after_max_resumes(monkeypatch):
     assert calls["n"] == 3               # initial + exactly 2 resumes
 
 
+def test_run_falls_back_to_fresh_on_stale_resume(monkeypatch):
+    # A stale/expired --resume returns an EMPTY answer with got_result True (claude
+    # still emits a result event; the text is just blank) and echoes back the bad
+    # session id. run() must retry ONCE without --resume, not return empty.
+    from dwim import claude_runner as cr
+    monkeypatch.setattr(cr.shutil, "which", lambda _x: "/usr/bin/claude")
+    seen = []
+
+    def fake_once(cmd, emit, timeout):
+        has_resume = "--resume" in cmd
+        seen.append(has_resume)
+        if has_resume:
+            return ("", "stale-sess", True)   # got=True but blank — the real bug
+        return ("fresh answer", "sess-new", True)
+    monkeypatch.setattr(cr, "_run_once", fake_once)
+    text, sid = cr.run("what does set -uo pipefail do", "haiku", resume="stale-sess")
+    assert text == "fresh answer" and sid == "sess-new"
+    assert seen == [True, False]             # tried resume, then fell back to fresh
+
+
 def test_run_keeps_last_session_id_when_resume_returns_empty(monkeypatch):
     from dwim import claude_runner as cr
     monkeypatch.setattr(cr.shutil, "which", lambda _x: "/usr/bin/claude")

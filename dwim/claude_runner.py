@@ -358,6 +358,15 @@ def run(prompt: str, model: str, effort: str = "", resume: str = "",
     try:
         text, session_id, got = _run_once(
             _build_cmd(prompt, model, effort, resume), sink, timeout)
+        # A stale/expired/invalid --resume target comes back with an EMPTY answer
+        # (claude -p still emits a result event, so got is True — but the text is
+        # blank; a session from a previous day, or one the server already dropped).
+        # Don't leave the user empty-handed: retry ONCE with a fresh session.
+        # Guarded on `resume` so a genuine fresh-run miss falls to the loop below.
+        if resume and not (text or "").strip():
+            sink.note("⟳ session expired — starting fresh")
+            text, session_id, got = _run_once(
+                _build_cmd(prompt, model, effort, ""), sink, timeout)
         tries = 0
         while not got and session_id and tries < max_resumes:
             tries += 1
